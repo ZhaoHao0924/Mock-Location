@@ -1,0 +1,4 @@
+.build/
+MockLocation.xcodeproj/
+MockLocation.ipa
+DerivedData/

@@ -1,0 +1,61 @@
+name: MockLocation
+options:
+  bundleIdPrefix: com.personal.mocklocation
+  deploymentTarget:
+    iOS: "15.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+targets:
+  MockLocation:
+    type: application
+    platform: iOS
+    sources:
+      - path: MockLocation
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.personal.mocklocation
+        INFOPLIST_FILE: MockLocation/Info.plist
+        CODE_SIGN_ENTITLEMENTS: MockLocation/MockLocation.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: MockLocation/MockLocation-Bridging-Header.h
+    dependencies:
+      - sdk: CoreLocation.framework
+      - sdk: MapKit.framework
+      - sdk: UIKit.framework
+      - target: MockLocationShare
+        embed: true
+  MockLocationShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.personal.mocklocation.share
+        INFOPLIST_FILE: ShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements
+        SKIP_INSTALL: YES
+    dependencies:
+      - sdk: CoreLocation.framework
+      - sdk: MapKit.framework
+      - sdk: UniformTypeIdentifiers.framework
+  MockLocationTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: MockLocation
+schemes:
+  MockLocation:
+    build:
+      targets:
+        MockLocation: all
+        MockLocationTests: [test]
+    test:
+      targets:
+        - MockLocationTests
