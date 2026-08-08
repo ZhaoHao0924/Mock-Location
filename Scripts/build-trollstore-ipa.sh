@@ -10,7 +10,7 @@ command -v xcodegen >/dev/null 2>&1 || {
   exit 1
 }
 
-xcodegen generate --spec "${project_root}/project.yml" --project "${project_root}/MockLocation.xcodeproj"
+xcodegen generate --spec "${project_root}/project.yml" --project "${project_root}"
 
 xcodebuild \
   -project "${project_root}/MockLocation.xcodeproj" \
