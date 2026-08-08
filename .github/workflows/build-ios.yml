@@ -24,7 +24,7 @@ jobs:
         run: xcodebuild -version
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: HOMEBREW_NO_REQUIRE_TAP_TRUST=1 brew install xcodegen
 
       - name: Build TrollStore IPA
         run: bash Scripts/build-trollstore-ipa.sh
