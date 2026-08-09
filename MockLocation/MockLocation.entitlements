@@ -6,6 +6,8 @@
     <true/>
     <key>platform-application</key>
     <true/>
+    <key>com.apple.private.security.no-sandbox</key>
+    <true/>
     <key>com.apple.security.application-groups</key>
     <array>
         <string>group.com.personal.mocklocation</string>

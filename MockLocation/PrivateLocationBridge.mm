@@ -8,31 +8,7 @@ typedef const void *MockSecTaskRef;
 typedef MockSecTaskRef (*MockSecTaskCreateFunction)(CFAllocatorRef allocator);
 typedef CFTypeRef (*MockSecTaskCopyFunction)(MockSecTaskRef task, CFStringRef entitlement, CFErrorRef *error);
 
-@implementation PrivateLocationBridge
-
-+ (id)simulationManager {
-    static id manager;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        Class managerClass = NSClassFromString(@"CLSimulationManager");
-        if (managerClass != Nil) {
-            manager = [[managerClass alloc] init];
-        }
-    });
-    return manager;
-}
-
-+ (NSArray<NSString *> *)requiredSelectors {
-    return @[
-        @"clearSimulatedLocations",
-        @"appendSimulatedLocation:",
-        @"flush",
-        @"startLocationSimulation",
-        @"stopLocationSimulation"
-    ];
-}
-
-+ (BOOL)hasSimulationEntitlement {
+static BOOL MockHasEntitlement(CFStringRef entitlement) {
     // These private declarations are omitted from the iOS SDK; resolve the exported symbols at runtime.
     MockSecTaskCreateFunction createTask = (MockSecTaskCreateFunction)dlsym(RTLD_DEFAULT, "SecTaskCreateFromSelf");
     MockSecTaskCopyFunction copyTaskValue = (MockSecTaskCopyFunction)dlsym(RTLD_DEFAULT, "SecTaskCopyValueForEntitlement");
@@ -46,7 +22,7 @@ typedef CFTypeRef (*MockSecTaskCopyFunction)(MockSecTaskRef task, CFStringRef en
         return NO;
     }
 
-    CFTypeRef value = copyTaskValue(task, CFSTR("com.apple.locationd.simulation"), NULL);
+    CFTypeRef value = copyTaskValue(task, entitlement, NULL);
     BOOL hasEntitlement = value != NULL &&
         CFGetTypeID(value) == CFBooleanGetTypeID() &&
         CFBooleanGetValue((CFBooleanRef)value);
@@ -58,30 +34,33 @@ typedef CFTypeRef (*MockSecTaskCopyFunction)(MockSecTaskRef task, CFStringRef en
     return hasEntitlement;
 }
 
+@implementation PrivateLocationBridge
+
++ (id)simulationManager {
+    Class managerClass = NSClassFromString(@"CLSimulationManager");
+    return managerClass != Nil ? [[managerClass alloc] init] : nil;
+}
+
++ (NSArray<NSString *> *)requiredSelectors {
+    return @[
+        @"clearSimulatedLocations",
+        @"appendSimulatedLocation:",
+        @"flush",
+        @"startLocationSimulation",
+        @"stopLocationSimulation"
+    ];
+}
+
++ (BOOL)hasSimulationEntitlement {
+    return MockHasEntitlement(CFSTR("com.apple.locationd.simulation"));
+}
+
 + (BOOL)hasPlatformApplicationEntitlement {
-    // This privileged XPC service requires both the simulation and platform-app entitlements.
-    MockSecTaskCreateFunction createTask = (MockSecTaskCreateFunction)dlsym(RTLD_DEFAULT, "SecTaskCreateFromSelf");
-    MockSecTaskCopyFunction copyTaskValue = (MockSecTaskCopyFunction)dlsym(RTLD_DEFAULT, "SecTaskCopyValueForEntitlement");
-    if (createTask == NULL || copyTaskValue == NULL) {
-        // The build script verifies the signed entitlement before producing an IPA.
-        return YES;
-    }
+    return MockHasEntitlement(CFSTR("platform-application"));
+}
 
-    MockSecTaskRef task = createTask(kCFAllocatorDefault);
-    if (task == NULL) {
-        return NO;
-    }
-
-    CFTypeRef value = copyTaskValue(task, CFSTR("platform-application"), NULL);
-    BOOL hasEntitlement = value != NULL &&
-        CFGetTypeID(value) == CFBooleanGetTypeID() &&
-        CFBooleanGetValue((CFBooleanRef)value);
-
-    if (value != NULL) {
-        CFRelease(value);
-    }
-    CFRelease((CFTypeRef)task);
-    return hasEntitlement;
++ (BOOL)hasNoSandboxEntitlement {
+    return MockHasEntitlement(CFSTR("com.apple.private.security.no-sandbox"));
 }
 
 + (BOOL)isAvailable {
@@ -107,6 +86,9 @@ typedef CFTypeRef (*MockSecTaskCopyFunction)(MockSecTaskRef task, CFStringRef en
     }
     if (![self hasPlatformApplicationEntitlement]) {
         return @"This installation is missing the platform-application entitlement required to talk to locationd. Reinstall the signed IPA with TrollStore, then restart the device once.";
+    }
+    if (![self hasNoSandboxEntitlement]) {
+        return @"This installation is missing the com.apple.private.security.no-sandbox entitlement required by the iOS 15 location simulation service. Reinstall the signed IPA with TrollStore, then restart the device once.";
     }
     if (![self isAvailable]) {
         return @"The installed runtime does not expose the required location simulation selectors.";
