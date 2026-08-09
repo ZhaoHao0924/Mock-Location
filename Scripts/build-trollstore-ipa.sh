@@ -165,6 +165,8 @@ sign_bundle "${app_path}" "${project_root}/MockLocation/MockLocation.entitlement
 assert_signed_entitlement "${app_path}" "com.apple.locationd.simulation" "main app"
 assert_signed_entitlement "${app_path}" "platform-application" "main app"
 assert_signed_entitlement "${app_path}" "com.apple.private.security.no-sandbox" "main app"
+assert_signed_entitlement "${app_path}" "AGXDeviceUserClient" "main app"
+assert_signed_entitlement "${app_path}" "IOSurfaceRootUserClient" "main app"
 
 test -f "${app_path}/Assets.car" || {
   echo "The app icon asset catalog was not compiled into Assets.car." >&2
