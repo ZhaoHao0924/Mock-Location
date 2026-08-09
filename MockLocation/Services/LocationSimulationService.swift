@@ -44,20 +44,20 @@ final class LocationSimulationService: ObservableObject {
     }
 
     func stop() {
-        var error: NSError?
-        if PrivateLocationBridge.stopWithError(&error) {
+        do {
+            try PrivateLocationBridge.stop()
             state = .idle
-        } else {
-            state = .failed(error?.localizedDescription ?? "Unable to stop location simulation.")
+        } catch {
+            state = .failed(error.localizedDescription)
         }
     }
 
     private func start(locations: [CLLocation], active: ActiveSimulation) {
-        var error: NSError?
-        if PrivateLocationBridge.start(withLocations: locations, error: &error) {
+        do {
+            try PrivateLocationBridge.start(withLocations: locations)
             state = .active(active)
-        } else {
-            state = .failed(error?.localizedDescription ?? "Unable to start location simulation.")
+        } catch {
+            state = .failed(error.localizedDescription)
         }
     }
 }
