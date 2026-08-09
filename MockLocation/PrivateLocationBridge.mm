@@ -26,6 +26,7 @@ typedef CFTypeRef (*MockSecTaskCopyFunction)(MockSecTaskRef task, CFStringRef en
     return @[
         @"clearSimulatedLocations",
         @"appendSimulatedLocation:",
+        @"flush",
         @"startLocationSimulation",
         @"stopLocationSimulation"
     ];
@@ -124,6 +125,7 @@ typedef CFTypeRef (*MockSecTaskCopyFunction)(MockSecTaskRef task, CFStringRef en
         for (CLLocation *location in locations) {
             [self appendLocation:location to:manager];
         }
+        [self invokeVoidSelector:NSSelectorFromString(@"flush") on:manager];
         [self invokeVoidSelector:NSSelectorFromString(@"startLocationSimulation") on:manager];
         return YES;
     } @catch (NSException *exception) {
