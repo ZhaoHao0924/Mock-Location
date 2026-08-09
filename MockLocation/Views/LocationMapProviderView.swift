@@ -148,8 +148,9 @@ final class MapTileContainer: UIView {
     private let attributionLabel = UILabel()
     private let imageCache = NSCache<NSString, UIImage>()
     private let session: URLSession = {
-        let configuration = URLSessionConfiguration.default
-        configuration.requestCachePolicy = .returnCacheDataElseLoad
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 15
         return URLSession(configuration: configuration)
     }()
@@ -310,8 +311,8 @@ final class MapTileContainer: UIView {
             return
         }
 
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 15
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         request.setValue("MockLocation/1.0", forHTTPHeaderField: "User-Agent")
         let task = session.dataTask(with: request) { [weak self] data, response, error in
             let result: Result<UIImage, Error>

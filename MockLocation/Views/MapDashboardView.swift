@@ -34,7 +34,15 @@ struct MapDashboardView: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button {
+                        mapError = nil
+                        mapReloadToken += 1
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .accessibilityLabel("\u{5237}\u{65B0}\u{5730}\u{56FE}\u{6570}\u{636E}")
+
                     Button {
                         favoriteName = repository.selectedTitle
                         showFavoriteName = true
