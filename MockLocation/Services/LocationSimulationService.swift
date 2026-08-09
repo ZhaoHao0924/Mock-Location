@@ -54,7 +54,7 @@ final class LocationSimulationService: ObservableObject {
 
     private func start(locations: [CLLocation], active: ActiveSimulation) {
         do {
-            try PrivateLocationBridge.start(withLocations: locations)
+            try PrivateLocationBridge.start(with: locations)
             state = .active(active)
         } catch {
             state = .failed(error.localizedDescription)
