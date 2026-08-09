@@ -52,10 +52,19 @@ run_and_capture() {
   fi
 }
 
-run_and_capture xcodegen xcodegen generate --spec "${project_root}/project.yml" --project "${project_root}" || exit $?
+(
+  cd "${project_root}"
+  run_and_capture xcodegen xcodegen generate --spec project.yml
+) || exit $?
+
+project_path="${project_root}/MockLocation.xcodeproj"
+test -d "${project_path}" || {
+  echo "::error title=XcodeGen output::Expected project was not generated at ${project_path}." >&2
+  exit 1
+}
 
 xcodebuild_args=(
-  -project "${project_root}/MockLocation.xcodeproj"
+  -project "${project_path}"
   -scheme MockLocation
   -configuration Release
   -sdk iphoneos
