@@ -1,6 +1,7 @@
 name: MockLocation
 options:
   bundleIdPrefix: com.personal.mocklocation
+  projectFormat: xcode15_3
   deploymentTarget:
     iOS: "15.0"
 settings:
