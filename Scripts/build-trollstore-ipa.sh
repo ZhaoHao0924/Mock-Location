@@ -134,8 +134,8 @@ bundle_executable() {
 main_executable="$(bundle_executable "${app_path}" "main app")"
 extension_path="${app_path}/PlugIns/MockLocationShare.appex"
 extension_executable="$(bundle_executable "${extension_path}" "share extension")"
-amap_map_executable="$(bundle_executable "${app_path}/Frameworks/MAMapKit.framework" "AMap map framework")"
-amap_foundation_executable="$(bundle_executable "${app_path}/Frameworks/AMapFoundationKit.framework" "AMap foundation framework")"
+amap_map_executable="MAMapKit"
+amap_foundation_executable="AMapFoundationKit"
 
 test -d "${app_path}/Frameworks/MAMapKit.framework/AMap.bundle" || {
   echo "The AMap map framework resource bundle is missing." >&2
