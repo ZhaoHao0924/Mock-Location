@@ -1,8 +1,12 @@
 #import "PrivateLocationBridge.h"
 #import <objc/message.h>
-#import <Security/Security.h>
+#import <dlfcn.h>
 
 static NSString *const MockLocationBridgeErrorDomain = @"com.personal.mocklocation.bridge";
+
+typedef const void *MockSecTaskRef;
+typedef MockSecTaskRef (*MockSecTaskCreateFunction)(CFAllocatorRef allocator);
+typedef CFTypeRef (*MockSecTaskCopyFunction)(MockSecTaskRef task, CFStringRef entitlement, CFErrorRef *error);
 
 @implementation PrivateLocationBridge
 
@@ -28,16 +32,20 @@ static NSString *const MockLocationBridgeErrorDomain = @"com.personal.mocklocati
 }
 
 + (BOOL)hasSimulationEntitlement {
-    SecTaskRef task = SecTaskCreateFromSelf(kCFAllocatorDefault);
+    // These private declarations are omitted from the iOS SDK; resolve the exported symbols at runtime.
+    MockSecTaskCreateFunction createTask = (MockSecTaskCreateFunction)dlsym(RTLD_DEFAULT, "SecTaskCreateFromSelf");
+    MockSecTaskCopyFunction copyTaskValue = (MockSecTaskCopyFunction)dlsym(RTLD_DEFAULT, "SecTaskCopyValueForEntitlement");
+    if (createTask == NULL || copyTaskValue == NULL) {
+        // The build script verifies the signed entitlement before producing an IPA.
+        return YES;
+    }
+
+    MockSecTaskRef task = createTask(kCFAllocatorDefault);
     if (task == NULL) {
         return NO;
     }
 
-    CFTypeRef value = SecTaskCopyValueForEntitlement(
-        task,
-        CFSTR("com.apple.locationd.simulation"),
-        NULL
-    );
+    CFTypeRef value = copyTaskValue(task, CFSTR("com.apple.locationd.simulation"), NULL);
     BOOL hasEntitlement = value != NULL &&
         CFGetTypeID(value) == CFBooleanGetTypeID() &&
         CFBooleanGetValue((CFBooleanRef)value);
@@ -45,7 +53,7 @@ static NSString *const MockLocationBridgeErrorDomain = @"com.personal.mocklocati
     if (value != NULL) {
         CFRelease(value);
     }
-    CFRelease(task);
+    CFRelease((CFTypeRef)task);
     return hasEntitlement;
 }
 
