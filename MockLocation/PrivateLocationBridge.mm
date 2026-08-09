@@ -1,5 +1,6 @@
 #import "PrivateLocationBridge.h"
 #import <objc/message.h>
+#import <Security/Security.h>
 
 static NSString *const MockLocationBridgeErrorDomain = @"com.personal.mocklocation.bridge";
 
@@ -26,6 +27,28 @@ static NSString *const MockLocationBridgeErrorDomain = @"com.personal.mocklocati
     ];
 }
 
++ (BOOL)hasSimulationEntitlement {
+    SecTaskRef task = SecTaskCreateFromSelf(kCFAllocatorDefault);
+    if (task == NULL) {
+        return NO;
+    }
+
+    CFTypeRef value = SecTaskCopyValueForEntitlement(
+        task,
+        CFSTR("com.apple.locationd.simulation"),
+        NULL
+    );
+    BOOL hasEntitlement = value != NULL &&
+        CFGetTypeID(value) == CFBooleanGetTypeID() &&
+        CFBooleanGetValue((CFBooleanRef)value);
+
+    if (value != NULL) {
+        CFRelease(value);
+    }
+    CFRelease(task);
+    return hasEntitlement;
+}
+
 + (BOOL)isAvailable {
     id manager = [self simulationManager];
     if (manager == nil) {
@@ -43,6 +66,9 @@ static NSString *const MockLocationBridgeErrorDomain = @"com.personal.mocklocati
 + (NSString *)availabilityMessage {
     if (NSClassFromString(@"CLSimulationManager") == Nil) {
         return @"The system location simulation runtime is unavailable on this OS version.";
+    }
+    if (![self hasSimulationEntitlement]) {
+        return @"This installation is missing the com.apple.locationd.simulation entitlement. Reinstall the signed IPA with TrollStore, then restart the device once.";
     }
     if (![self isAvailable]) {
         return @"The installed runtime does not expose the required location simulation selectors.";
@@ -76,7 +102,7 @@ static NSString *const MockLocationBridgeErrorDomain = @"com.personal.mocklocati
         }
         return NO;
     }
-    if (![self isAvailable]) {
+    if ([self availabilityMessage] != nil) {
         if (error != nil) {
             *error = [self unavailableError];
         }
@@ -103,7 +129,7 @@ static NSString *const MockLocationBridgeErrorDomain = @"com.personal.mocklocati
 }
 
 + (BOOL)stopWithError:(NSError * _Nullable * _Nullable)error {
-    if (![self isAvailable]) {
+    if ([self availabilityMessage] != nil) {
         if (error != nil) {
             *error = [self unavailableError];
         }

@@ -6,6 +6,8 @@
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleDisplayName</key>
     <string>MockLocation</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleInfoDictionaryVersion</key>

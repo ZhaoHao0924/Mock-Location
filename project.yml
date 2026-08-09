@@ -24,9 +24,11 @@ targets:
         INFOPLIST_FILE: MockLocation/Info.plist
         CODE_SIGN_ENTITLEMENTS: MockLocation/MockLocation.entitlements
         SWIFT_OBJC_BRIDGING_HEADER: MockLocation/MockLocation-Bridging-Header.h
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - sdk: CoreLocation.framework
       - sdk: MapKit.framework
+      - sdk: Security.framework
       - sdk: UIKit.framework
       - target: MockLocationShare
         embed: true

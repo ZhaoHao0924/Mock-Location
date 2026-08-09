@@ -119,6 +119,61 @@ main_executable="$(bundle_executable "${app_path}" "main app")"
 extension_path="${app_path}/PlugIns/MockLocationShare.appex"
 extension_executable="$(bundle_executable "${extension_path}" "share extension")"
 
+sign_bundle() {
+  local bundle_path="$1"
+  local entitlements_path="$2"
+  local bundle_name="$3"
+
+  test -f "${entitlements_path}" || {
+    echo "The ${bundle_name} entitlements file is missing: ${entitlements_path}" >&2
+    exit 1
+  }
+
+  /usr/bin/codesign \
+    --force \
+    --sign - \
+    --timestamp=none \
+    --entitlements "${entitlements_path}" \
+    "${bundle_path}"
+}
+
+assert_signed_entitlement() {
+  local bundle_path="$1"
+  local entitlement_name="$2"
+  local bundle_name="$3"
+  local entitlements_dump="${build_root}/$(basename "${bundle_path}").signed-entitlements.plist"
+  local actual_value
+
+  /usr/bin/codesign -d --entitlements :- --xml "${bundle_path}" > "${entitlements_dump}" 2> "${entitlements_dump}.log" || {
+    echo "Unable to read the ${bundle_name} signature entitlements." >&2
+    cat "${entitlements_dump}.log" >&2 || true
+    exit 1
+  }
+
+  actual_value="$(/usr/libexec/PlistBuddy -c "Print :${entitlement_name}" "${entitlements_dump}" 2>/dev/null || true)"
+  if [[ "${actual_value}" != "true" ]]; then
+    echo "The ${bundle_name} signature is missing ${entitlement_name}=true." >&2
+    cat "${entitlements_dump}" >&2 || true
+    exit 1
+  fi
+}
+
+# TrollStore can only grant the private entitlement when it is embedded in the IPA signature.
+sign_bundle "${extension_path}" "${project_root}/ShareExtension/ShareExtension.entitlements" "share extension"
+sign_bundle "${app_path}" "${project_root}/MockLocation/MockLocation.entitlements" "main app"
+/usr/bin/codesign --verify --deep --strict "${app_path}"
+assert_signed_entitlement "${app_path}" "com.apple.locationd.simulation" "main app"
+
+test -f "${app_path}/Assets.car" || {
+  echo "The app icon asset catalog was not compiled into Assets.car." >&2
+  exit 1
+}
+app_icon_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "${app_path}/Info.plist" 2>/dev/null || true)"
+if [[ "${app_icon_name}" != "AppIcon" ]]; then
+  echo "The compiled app does not declare AppIcon as its bundle icon." >&2
+  exit 1
+fi
+
 rm -rf "${package_root}" "${ipa_path}"
 mkdir -p "${package_root}/Payload"
 cp -R "${app_path}" "${package_root}/Payload/"
@@ -138,6 +193,7 @@ assert_ipa_entry() {
 }
 
 assert_ipa_entry "Payload/MockLocation.app/${main_executable}"
+assert_ipa_entry "Payload/MockLocation.app/Assets.car"
 assert_ipa_entry "Payload/MockLocation.app/PlugIns/MockLocationShare.appex/${extension_executable}"
 
 echo "Created ${ipa_path}"
