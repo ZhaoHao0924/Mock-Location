@@ -33,6 +33,11 @@
     </array>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>虚拟定位仅使用当前位置来在地图上居中显示。</string>
     <key>UIApplicationSceneManifest</key>
