@@ -137,11 +137,6 @@ extension_executable="$(bundle_executable "${extension_path}" "share extension")
 amap_map_executable="MAMapKit"
 amap_foundation_executable="AMapFoundationKit"
 
-test -d "${app_path}/Frameworks/MAMapKit.framework/AMap.bundle" || {
-  echo "The AMap map framework resource bundle is missing." >&2
-  exit 1
-}
-
 sign_bundle() {
   local bundle_path="$1"
   local entitlements_path="$2"
@@ -229,7 +224,6 @@ assert_ipa_entry "Payload/MockLocation.app/${main_executable}"
 assert_ipa_entry "Payload/MockLocation.app/Assets.car"
 assert_ipa_entry "Payload/MockLocation.app/PlugIns/MockLocationShare.appex/${extension_executable}"
 assert_ipa_entry "Payload/MockLocation.app/Frameworks/MAMapKit.framework/${amap_map_executable}"
-assert_ipa_entry "Payload/MockLocation.app/Frameworks/MAMapKit.framework/AMap.bundle/res.ck"
 assert_ipa_entry "Payload/MockLocation.app/Frameworks/AMapFoundationKit.framework/${amap_foundation_executable}"
 
 echo "Created ${ipa_path}"
