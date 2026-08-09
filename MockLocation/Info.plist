@@ -5,7 +5,7 @@
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleDisplayName</key>
-    <string>MockLocation</string>
+    <string>虚拟定位</string>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
@@ -34,7 +34,7 @@
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>MockLocation uses your current position only to center the map.</string>
+    <string>虚拟定位仅使用当前位置来在地图上居中显示。</string>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>

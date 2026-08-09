@@ -5,6 +5,8 @@ struct MapDashboardView: View {
     @EnvironmentObject private var repository: LocationRepository
     @EnvironmentObject private var simulation: LocationSimulationService
     @StateObject private var search = LocationSearch()
+    @State private var mapError: String?
+    @State private var mapReloadToken = 0
     @State private var latitudeText = ""
     @State private var longitudeText = ""
     @State private var showFavoriteName = false
@@ -13,13 +15,19 @@ struct MapDashboardView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                LocationMapView(coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ZStack(alignment: .top) {
+                    LocationMapView(coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
+                        .id(mapReloadToken)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if let mapError {
+                        mapErrorBanner(message: mapError)
+                    }
+                }
 
                 controlSurface
             }
-            .navigationTitle("MockLocation")
-            .searchable(text: $search.query, prompt: "Search places")
+            .navigationTitle("虚拟定位")
+            .searchable(text: $search.query, prompt: "搜索地点")
             .overlay(alignment: .top) {
                 if !search.query.isEmpty && !search.suggestions.isEmpty {
                     searchResults
@@ -33,17 +41,17 @@ struct MapDashboardView: View {
                     } label: {
                         Image(systemName: "star")
                     }
-                    .accessibilityLabel("Save location")
+                    .accessibilityLabel("收藏当前位置")
                 }
             }
         }
         .navigationViewStyle(.stack)
         .onAppear(perform: syncCoordinateFields)
         .onChange(of: repository.selectedCoordinate) { _ in syncCoordinateFields() }
-        .alert("Save location", isPresented: $showFavoriteName) {
-            TextField("Name", text: $favoriteName)
-            Button("Save") { repository.addFavorite(title: favoriteName) }
-            Button("Cancel", role: .cancel) { }
+        .alert("收藏地点", isPresented: $showFavoriteName) {
+            TextField("名称", text: $favoriteName)
+            Button("保存") { repository.addFavorite(title: favoriteName) }
+            Button("取消", role: .cancel) { }
         }
     }
 
@@ -66,6 +74,31 @@ struct MapDashboardView: View {
         .background(.regularMaterial)
     }
 
+    private func mapErrorBanner(message: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "map.fill")
+                .foregroundColor(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("地图数据未加载")
+                    .font(.subheadline.weight(.semibold))
+                Text(message)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button("重试") {
+                mapError = nil
+                mapReloadToken += 1
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+        .padding(12)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.horizontal)
+        .padding(.top, 8)
+    }
+
     private var controlSurface: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -78,10 +111,10 @@ struct MapDashboardView: View {
             }
 
             HStack(spacing: 8) {
-                TextField("Latitude", text: $latitudeText)
+                TextField("纬度", text: $latitudeText)
                     .keyboardType(.numbersAndPunctuation)
                     .textFieldStyle(.roundedBorder)
-                TextField("Longitude", text: $longitudeText)
+                TextField("经度", text: $longitudeText)
                     .keyboardType(.numbersAndPunctuation)
                     .textFieldStyle(.roundedBorder)
                 Button {
@@ -90,14 +123,14 @@ struct MapDashboardView: View {
                     Image(systemName: "checkmark")
                 }
                 .buttonStyle(.bordered)
-                .accessibilityLabel("Apply coordinates")
+                .accessibilityLabel("应用坐标")
             }
 
             HStack(spacing: 10) {
                 Button {
                     simulation.startPoint(repository.selectedCoordinate, title: repository.selectedTitle)
                 } label: {
-                    Label("Start", systemImage: "play.fill")
+                    Label("开启定位", systemImage: "play.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -106,10 +139,11 @@ struct MapDashboardView: View {
                 Button(role: .destructive) {
                     simulation.stop()
                 } label: {
-                    Image(systemName: "stop.fill")
+                    Label("关闭定位", systemImage: "stop.fill")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .accessibilityLabel("Stop location simulation")
+                .accessibilityLabel("关闭虚拟定位")
             }
 
             if case let .failed(message) = simulation.state {
@@ -126,11 +160,11 @@ struct MapDashboardView: View {
     @ViewBuilder
     private var simulationIndicator: some View {
         if let active = simulation.state.activeSimulation {
-            Label(active.kind == .point ? "Active" : "Route", systemImage: "location.fill")
+            Label(active.kind == .point ? "定位中" : "路线中", systemImage: "location.fill")
                 .font(.caption.weight(.semibold))
                 .foregroundColor(.teal)
         } else {
-            Label("Idle", systemImage: "location")
+            Label("未开启", systemImage: "location")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -143,6 +177,6 @@ struct MapDashboardView: View {
 
     private func applyCoordinateFields() {
         guard let latitude = Double(latitudeText), let longitude = Double(longitudeText) else { return }
-        repository.select(GeoCoordinate(latitude: latitude, longitude: longitude), title: "Manual coordinate")
+        repository.select(GeoCoordinate(latitude: latitude, longitude: longitude), title: "手动坐标")
     }
 }

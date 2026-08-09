@@ -7,9 +7,9 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section("Simulation runtime") {
+                Section("模拟状态") {
                     HStack {
-                        Label("Location simulation", systemImage: "location.fill")
+                        Label("系统定位模拟", systemImage: "location.fill")
                         Spacer()
                         statusText
                     }
@@ -24,21 +24,21 @@ struct SettingsView: View {
                     Button {
                         simulation.refreshAvailability()
                     } label: {
-                        Label("Check runtime", systemImage: "arrow.clockwise")
+                        Label("刷新状态", systemImage: "arrow.clockwise")
                     }
                 }
 
-                Section("Control") {
+                Section("安全操作") {
                     Button(role: .destructive) {
                         showingResetConfirmation = true
                     } label: {
-                        Label("Stop and clear simulation", systemImage: "stop.circle")
+                        Label("停止并清除模拟", systemImage: "stop.circle")
                     }
                 }
             }
-            .navigationTitle("Status")
-            .confirmationDialog("Stop location simulation?", isPresented: $showingResetConfirmation, titleVisibility: .visible) {
-                Button("Stop simulation", role: .destructive) { simulation.stop() }
+            .navigationTitle("设置")
+            .confirmationDialog("停止虚拟定位？", isPresented: $showingResetConfirmation, titleVisibility: .visible) {
+                Button("停止并清除", role: .destructive) { simulation.stop() }
             }
         }
         .navigationViewStyle(.stack)
@@ -48,13 +48,13 @@ struct SettingsView: View {
     private var statusText: some View {
         switch simulation.state {
         case .idle:
-            Text("Ready").foregroundColor(.secondary)
+            Text("未开启").foregroundColor(.secondary)
         case .active:
-            Text("Active").foregroundColor(.teal)
+            Text("运行中").foregroundColor(.teal)
         case .unavailable:
-            Text("Unavailable").foregroundColor(.orange)
+            Text("不可用").foregroundColor(.orange)
         case .failed:
-            Text("Error").foregroundColor(.red)
+            Text("失败").foregroundColor(.red)
         }
     }
 }

@@ -79,19 +79,19 @@ static BOOL MockHasEntitlement(CFStringRef entitlement) {
 
 + (NSString *)availabilityMessage {
     if (NSClassFromString(@"CLSimulationManager") == Nil) {
-        return @"The system location simulation runtime is unavailable on this OS version.";
+        return @"当前 iOS 版本不支持系统定位模拟。";
     }
     if (![self hasSimulationEntitlement]) {
-        return @"This installation is missing the com.apple.locationd.simulation entitlement. Reinstall the signed IPA with TrollStore, then restart the device once.";
+        return @"未检测到定位模拟权限。请使用 TrollStore 重新安装此 IPA。";
     }
     if (![self hasPlatformApplicationEntitlement]) {
-        return @"This installation is missing the platform-application entitlement required to talk to locationd. Reinstall the signed IPA with TrollStore, then restart the device once.";
+        return @"未检测到平台应用权限。请使用 TrollStore 重新安装此 IPA。";
     }
     if (![self hasNoSandboxEntitlement]) {
-        return @"This installation is missing the com.apple.private.security.no-sandbox entitlement required by the iOS 15 location simulation service. Reinstall the signed IPA with TrollStore, then restart the device once.";
+        return @"缺少 iOS 15 所需的无沙盒权限。请使用 TrollStore 重新安装此 IPA。";
     }
     if (![self isAvailable]) {
-        return @"The installed runtime does not expose the required location simulation selectors.";
+        return @"系统定位模拟接口不可用。";
     }
     return nil;
 }
@@ -106,7 +106,7 @@ static BOOL MockHasEntitlement(CFStringRef entitlement) {
 }
 
 + (NSError *)unavailableError {
-    NSString *message = [self availabilityMessage] ?: @"Location simulation is unavailable.";
+    NSString *message = [self availabilityMessage] ?: @"定位模拟功能不可用。";
     return [NSError errorWithDomain:MockLocationBridgeErrorDomain
                                code:1
                            userInfo:@{ NSLocalizedDescriptionKey: message }];
@@ -118,7 +118,7 @@ static BOOL MockHasEntitlement(CFStringRef entitlement) {
         if (error != nil) {
             *error = [NSError errorWithDomain:MockLocationBridgeErrorDomain
                                          code:2
-                                     userInfo:@{ NSLocalizedDescriptionKey: @"A location is required." }];
+                                     userInfo:@{ NSLocalizedDescriptionKey: @"没有可模拟的位置。" }];
         }
         return NO;
     }
@@ -143,7 +143,7 @@ static BOOL MockHasEntitlement(CFStringRef entitlement) {
         if (error != nil) {
             *error = [NSError errorWithDomain:MockLocationBridgeErrorDomain
                                          code:3
-                                     userInfo:@{ NSLocalizedDescriptionKey: exception.reason ?: @"Location simulation failed." }];
+                                     userInfo:@{ NSLocalizedDescriptionKey: exception.reason ?: @"启动定位模拟失败。" }];
         }
         return NO;
     }
@@ -166,7 +166,7 @@ static BOOL MockHasEntitlement(CFStringRef entitlement) {
         if (error != nil) {
             *error = [NSError errorWithDomain:MockLocationBridgeErrorDomain
                                          code:4
-                                     userInfo:@{ NSLocalizedDescriptionKey: exception.reason ?: @"Unable to stop location simulation." }];
+                                     userInfo:@{ NSLocalizedDescriptionKey: exception.reason ?: @"停止定位模拟失败。" }];
         }
         return NO;
     }

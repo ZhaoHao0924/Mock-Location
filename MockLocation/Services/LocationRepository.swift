@@ -6,7 +6,7 @@ final class LocationRepository: ObservableObject {
     @Published private(set) var recentLocations: [SavedLocation] = []
     @Published private(set) var savedRoutes: [RoutePlan] = []
     @Published var selectedCoordinate = GeoCoordinate(latitude: 31.2304, longitude: 121.4737)
-    @Published var selectedTitle = "Selected location"
+    @Published var selectedTitle = "默认地点"
 
     private enum Key {
         static let favorites = "favorites"
@@ -20,10 +20,10 @@ final class LocationRepository: ObservableObject {
         savedRoutes = load([RoutePlan].self, key: Key.routes, fallback: [])
     }
 
-    func select(_ coordinate: GeoCoordinate, title: String = "Selected location", addToHistory: Bool = true) {
+    func select(_ coordinate: GeoCoordinate, title: String = "未命名地点", addToHistory: Bool = true) {
         guard coordinate.isValid else { return }
         selectedCoordinate = coordinate
-        selectedTitle = title.isEmpty ? "Selected location" : title
+        selectedTitle = title.isEmpty ? "未命名地点" : title
         if addToHistory {
             addRecent(SavedLocation(title: selectedTitle, coordinate: coordinate))
         }
@@ -52,7 +52,7 @@ final class LocationRepository: ObservableObject {
 
     func saveRoute(title: String, waypoints: [GeoCoordinate], speed: Double) {
         guard waypoints.count >= 2 else { return }
-        let route = RoutePlan(title: title.nonEmpty ?? "Route", waypoints: waypoints, speedMetersPerSecond: speed)
+        let route = RoutePlan(title: title.nonEmpty ?? "未命名路线", waypoints: waypoints, speedMetersPerSecond: speed)
         savedRoutes.insert(route, at: 0)
         persist(savedRoutes, key: Key.routes)
     }
@@ -78,7 +78,7 @@ final class LocationRepository: ObservableObject {
               let longitude = components.queryItems?.first(where: { $0.name == "lon" })?.value.flatMap(Double.init) else {
             return
         }
-        let title = components.queryItems?.first(where: { $0.name == "title" })?.value ?? "Shared location"
+        let title = components.queryItems?.first(where: { $0.name == "title" })?.value ?? "分享地点"
         select(GeoCoordinate(latitude: latitude, longitude: longitude), title: title)
     }
 

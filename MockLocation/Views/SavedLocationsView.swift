@@ -7,9 +7,9 @@ struct SavedLocationsView: View {
     var body: some View {
         NavigationView {
             List {
-                Section("Favorites") {
+                Section("收藏地点") {
                     if repository.favorites.isEmpty {
-                        Text("No saved locations.").foregroundColor(.secondary)
+                        Text("暂无收藏地点").foregroundColor(.secondary)
                     }
                     ForEach(repository.favorites) { location in
                         locationRow(location, allowDelete: true)
@@ -18,24 +18,24 @@ struct SavedLocationsView: View {
 
                 Section {
                     if repository.recentLocations.isEmpty {
-                        Text("No recent locations.").foregroundColor(.secondary)
+                        Text("暂无最近使用地点").foregroundColor(.secondary)
                     }
                     ForEach(repository.recentLocations) { location in
                         locationRow(location, allowDelete: false)
                     }
                 } header: {
                     HStack {
-                        Text("Recent")
+                        Text("最近使用")
                         Spacer()
-                        Button("Clear") { repository.clearRecents() }
+                        Button("清空") { repository.clearRecents() }
                             .font(.caption)
                             .disabled(repository.recentLocations.isEmpty)
                     }
                 }
 
-                Section("Saved routes") {
+                Section("已保存路线") {
                     if repository.savedRoutes.isEmpty {
-                        Text("No saved routes.").foregroundColor(.secondary)
+                        Text("暂无已保存路线").foregroundColor(.secondary)
                     }
                     ForEach(repository.savedRoutes) { route in
                         Button {
@@ -43,19 +43,19 @@ struct SavedLocationsView: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(route.title).foregroundColor(.primary)
-                                Text("\(route.waypoints.count) points | \(Int(route.speedMetersPerSecond * 3.6)) km/h")
+                                Text("\(route.waypoints.count) 个途经点 · \(Int(route.speedMetersPerSecond * 3.6)) 公里/小时")
                                     .font(.footnote).foregroundColor(.secondary)
                             }
                         }
                         .swipeActions {
                             Button(role: .destructive) { repository.deleteRoute(route) } label: {
-                                Label("Delete", systemImage: "trash")
+                                Label("删除", systemImage: "trash")
                             }
                         }
                     }
                 }
             }
-            .navigationTitle("Saved")
+            .navigationTitle("收藏与记录")
         }
         .navigationViewStyle(.stack)
     }
@@ -72,13 +72,13 @@ struct SavedLocationsView: View {
         .swipeActions {
             if allowDelete {
                 Button(role: .destructive) { repository.deleteFavorite(location) } label: {
-                    Label("Delete", systemImage: "trash")
+                    Label("删除", systemImage: "trash")
                 }
             }
             Button {
                 simulation.startPoint(location.coordinate, title: location.title)
             } label: {
-                Label("Start", systemImage: "play.fill")
+                Label("开始定位", systemImage: "play.fill")
             }
             .tint(.teal)
         }

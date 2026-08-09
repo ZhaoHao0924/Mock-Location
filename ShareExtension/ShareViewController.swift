@@ -18,12 +18,12 @@ final class ShareViewController: UIViewController {
     private func configureView() {
         view.backgroundColor = .systemBackground
         titleLabel.font = .preferredFont(forTextStyle: .headline)
-        titleLabel.text = "Set mock location"
+        titleLabel.text = "设置虚拟定位"
         detailLabel.font = .preferredFont(forTextStyle: .subheadline)
         detailLabel.textColor = .secondaryLabel
         detailLabel.numberOfLines = 0
-        detailLabel.text = "Reading shared location..."
-        applyButton.setTitle("Apply", for: .normal)
+        detailLabel.text = "正在读取分享的位置…"
+        applyButton.setTitle("应用", for: .normal)
         applyButton.titleLabel?.font = .preferredFont(forTextStyle: .headline)
         applyButton.addTarget(self, action: #selector(applyLocation), for: .touchUpInside)
         applyButton.isEnabled = false
@@ -44,7 +44,7 @@ final class ShareViewController: UIViewController {
         let items = extensionContext?.inputItems.compactMap { $0 as? NSExtensionItem } ?? []
         for item in items {
             if let text = item.attributedContentText?.string, let coordinate = Self.coordinate(from: text) {
-                setPayload(SharedLocationPayload(latitude: coordinate.latitude, longitude: coordinate.longitude, title: "Shared location"))
+                setPayload(SharedLocationPayload(latitude: coordinate.latitude, longitude: coordinate.longitude, title: "分享地点"))
                 return
             }
             for provider in item.attachments ?? [] {
@@ -63,7 +63,7 @@ final class ShareViewController: UIViewController {
                             SharedLocationPayload(
                                 latitude: coordinate.latitude,
                                 longitude: coordinate.longitude,
-                                title: mapItem.name ?? "Shared location"
+                                title: mapItem.name ?? "分享地点"
                             )
                         )
                     }
@@ -76,7 +76,7 @@ final class ShareViewController: UIViewController {
                             self?.showInvalidLocation()
                             return
                         }
-                        self?.setPayload(SharedLocationPayload(latitude: coordinate.latitude, longitude: coordinate.longitude, title: url.host ?? "Shared location"))
+                        self?.setPayload(SharedLocationPayload(latitude: coordinate.latitude, longitude: coordinate.longitude, title: url.host ?? "分享地点"))
                     }
                     return
                 }
@@ -95,7 +95,7 @@ final class ShareViewController: UIViewController {
 
     private func showInvalidLocation() {
         DispatchQueue.main.async {
-            self.detailLabel.text = "No coordinates were found in this shared item."
+            self.detailLabel.text = "未能从分享内容中识别有效坐标。"
         }
     }
 

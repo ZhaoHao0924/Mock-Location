@@ -15,7 +15,7 @@ struct SharedLocationPayload: Codable, Equatable {
     let title: String
     let createdAt: Date
 
-    init(latitude: Double, longitude: Double, title: String = "Shared location") {
+    init(latitude: Double, longitude: Double, title: String = "分享地点") {
         self.latitude = latitude
         self.longitude = longitude
         self.title = title

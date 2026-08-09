@@ -2,6 +2,12 @@ import Combine
 import CoreLocation
 import Foundation
 
+struct SimulationNotice: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
 final class LocationSimulationService: ObservableObject {
     enum State: Equatable {
         case idle
@@ -16,6 +22,7 @@ final class LocationSimulationService: ObservableObject {
     }
 
     @Published private(set) var state: State = .idle
+    @Published var notice: SimulationNotice?
 
     func refreshAvailability() {
         if let message = PrivateLocationBridge.availabilityMessage() {
@@ -32,7 +39,9 @@ final class LocationSimulationService: ObservableObject {
 
     func startRoute(_ route: RoutePlan) {
         guard route.waypoints.count >= 2 else {
-            state = .failed("A route needs at least two points.")
+            let message = "路线至少需要两个点。"
+            state = .failed(message)
+            presentNotice(title: "启动失败", message: message)
             return
         }
         let locations = RouteInterpolator.makeLocations(
@@ -47,8 +56,11 @@ final class LocationSimulationService: ObservableObject {
         do {
             try PrivateLocationBridge.stop()
             state = .idle
+            presentNotice(title: "虚拟定位已关闭", message: "系统位置已恢复为真实位置。")
         } catch {
-            state = .failed(error.localizedDescription)
+            let message = failureMessage(for: error)
+            state = .failed(message)
+            presentNotice(title: "关闭失败", message: message)
         }
     }
 
@@ -56,8 +68,21 @@ final class LocationSimulationService: ObservableObject {
         do {
             try PrivateLocationBridge.start(with: locations)
             state = .active(active)
+            let target = active.kind == .point ? "已切换到“\(active.title)”" : "路线模拟已开始。"
+            presentNotice(title: "虚拟定位已开启", message: "\(target)\n其他应用现在会收到模拟位置。")
         } catch {
-            state = .failed(error.localizedDescription)
+            let message = failureMessage(for: error)
+            state = .failed(message)
+            presentNotice(title: "启动失败", message: message)
         }
+    }
+
+    private func presentNotice(title: String, message: String) {
+        notice = SimulationNotice(title: title, message: message)
+    }
+
+    private func failureMessage(for error: Error) -> String {
+        let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return description.isEmpty ? "请检查 TrollStore 权限和系统版本后重试。" : description
     }
 }

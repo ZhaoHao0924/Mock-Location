@@ -1,17 +1,26 @@
 import SwiftUI
 
 struct RootTabView: View {
+    @EnvironmentObject private var simulation: LocationSimulationService
+
     var body: some View {
         TabView {
             MapDashboardView()
-                .tabItem { Label("Location", systemImage: "map") }
+                .tabItem { Label("地图", systemImage: "map") }
             RoutePlannerView()
-                .tabItem { Label("Route", systemImage: "point.topleft.down.curvedto.point.bottomright.up") }
+                .tabItem { Label("路线", systemImage: "point.topleft.down.curvedto.point.bottomright.up") }
             SavedLocationsView()
-                .tabItem { Label("Saved", systemImage: "star") }
+                .tabItem { Label("收藏", systemImage: "star") }
             SettingsView()
-                .tabItem { Label("Status", systemImage: "gearshape") }
+                .tabItem { Label("设置", systemImage: "gearshape") }
         }
         .tint(.teal)
+        .alert(item: $simulation.notice) { notice in
+            Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("确定"))
+            )
+        }
     }
 }

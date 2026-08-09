@@ -1,16 +1,21 @@
+import Foundation
 import MapKit
 import SwiftUI
 
 struct LocationMapView: UIViewRepresentable {
     @Binding var coordinate: GeoCoordinate
     @Binding var title: String
+    @Binding var mapError: String?
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
+        mapView.mapType = .standard
         mapView.showsUserLocation = true
+        mapView.showsCompass = true
+        mapView.showsScale = true
         mapView.pointOfInterestFilter = .includingAll
         let recognizer = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
         recognizer.minimumPressDuration = 0.35
@@ -32,12 +37,35 @@ struct LocationMapView: UIViewRepresentable {
             self.parent = parent
         }
 
+        func mapViewWillStartLoadingMap(_ mapView: MKMapView) {
+            parent.mapError = nil
+        }
+
+        func mapViewDidFinishLoadingMap(_ mapView: MKMapView) {
+            parent.mapError = nil
+        }
+
+        func mapViewDidFailLoadingMap(_ mapView: MKMapView, withError error: Error) {
+            let error = error as NSError
+            let networkErrors = [
+                NSURLErrorNotConnectedToInternet,
+                NSURLErrorTimedOut,
+                NSURLErrorCannotConnectToHost,
+                NSURLErrorNetworkConnectionLost
+            ]
+            if error.domain == NSURLErrorDomain && networkErrors.contains(error.code) {
+                parent.mapError = "请检查网络连接后重试。"
+            } else {
+                parent.mapError = "地图服务暂时不可用，请稍后重试。"
+            }
+        }
+
         @objc func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
             guard recognizer.state == .began, let mapView = recognizer.view as? MKMapView else { return }
             let point = recognizer.location(in: mapView)
             let mapCoordinate = mapView.convert(point, toCoordinateFrom: mapView)
             parent.coordinate = GeoCoordinate(latitude: mapCoordinate.latitude, longitude: mapCoordinate.longitude)
-            parent.title = "Map pin"
+            parent.title = "地图选点"
             updateAnnotation(on: mapView, coordinate: parent.coordinate, title: parent.title, recenter: false)
         }
 
