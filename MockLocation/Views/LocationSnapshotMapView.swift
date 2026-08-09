@@ -90,9 +90,7 @@ struct LocationSnapshotMapView: UIViewRepresentable {
                     guard let snapshot else {
                         container.endLoading()
                         self.mapLoadFailed = true
-                        self.parent.mapError = error == nil
-                            ? "兼容地图没有返回底图数据，请重试。"
-                            : "兼容地图加载失败，请检查网络后重试。"
+                        self.parent.mapError = self.mapErrorMessage(for: error)
                         return
                     }
 
@@ -187,6 +185,19 @@ struct LocationSnapshotMapView: UIViewRepresentable {
 
         private func clampedY(_ value: Double) -> Double {
             min(max(value, 0), MKMapRect.world.maxY)
+        }
+
+        private func mapErrorMessage(for error: Error?) -> String {
+            guard let error else {
+                return "兼容地图没有返回底图数据，请重试。"
+            }
+
+            let nsError = error as NSError
+            var diagnostics = "\(nsError.domain) \(nsError.code)"
+            if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                diagnostics += "；底层错误：\(underlyingError.domain) \(underlyingError.code)"
+            }
+            return "兼容地图加载失败（\(diagnostics)）：\(nsError.localizedDescription)"
         }
     }
 }
