@@ -134,9 +134,6 @@ bundle_executable() {
 main_executable="$(bundle_executable "${app_path}" "main app")"
 extension_path="${app_path}/PlugIns/MockLocationShare.appex"
 extension_executable="$(bundle_executable "${extension_path}" "share extension")"
-amap_map_executable="MAMapKit"
-amap_foundation_executable="AMapFoundationKit"
-
 sign_bundle() {
   local bundle_path="$1"
   local entitlements_path="$2"
@@ -223,7 +220,5 @@ assert_ipa_entry() {
 assert_ipa_entry "Payload/MockLocation.app/${main_executable}"
 assert_ipa_entry "Payload/MockLocation.app/Assets.car"
 assert_ipa_entry "Payload/MockLocation.app/PlugIns/MockLocationShare.appex/${extension_executable}"
-assert_ipa_entry "Payload/MockLocation.app/Frameworks/MAMapKit.framework/${amap_map_executable}"
-assert_ipa_entry "Payload/MockLocation.app/Frameworks/AMapFoundationKit.framework/${amap_foundation_executable}"
 
 echo "Created ${ipa_path}"
