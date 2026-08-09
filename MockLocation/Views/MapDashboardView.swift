@@ -1,11 +1,9 @@
-import MapKit
 import SwiftUI
 
 struct MapDashboardView: View {
     @EnvironmentObject private var repository: LocationRepository
     @EnvironmentObject private var simulation: LocationSimulationService
     @StateObject private var search = LocationSearch()
-    @State private var mapDisplayMode: MapDisplayMode = .amap
     @State private var mapError: String?
     @State private var mapReloadToken = 0
     @State private var latitudeText = ""
@@ -17,15 +15,7 @@ struct MapDashboardView: View {
         NavigationView {
             VStack(spacing: 0) {
                 ZStack(alignment: .top) {
-                    Group {
-                        if mapDisplayMode == .amap {
-                            LocationAMapView(coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
-                        } else if mapDisplayMode == .compatibility {
-                            LocationSnapshotMapView(coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
-                        } else {
-                            LocationMapView(coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
-                        }
-                    }
+                    LocationAMapView(coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
                         .id(mapReloadToken)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     if let mapError {
@@ -57,10 +47,6 @@ struct MapDashboardView: View {
         .navigationViewStyle(.stack)
         .onAppear(perform: syncCoordinateFields)
         .onChange(of: repository.selectedCoordinate) { _ in syncCoordinateFields() }
-        .onChange(of: mapDisplayMode) { _ in
-            mapError = nil
-            mapReloadToken += 1
-        }
         .alert("收藏地点", isPresented: $showFavoriteName) {
             TextField("名称", text: $favoriteName)
             Button("保存") { repository.addFavorite(title: favoriteName) }
@@ -122,13 +108,6 @@ struct MapDashboardView: View {
                 Spacer()
                 simulationIndicator
             }
-
-            Picker("地图模式", selection: $mapDisplayMode) {
-                Text("高德地图").tag(MapDisplayMode.amap)
-                Text("兼容地图").tag(MapDisplayMode.compatibility)
-                Text("互动地图").tag(MapDisplayMode.interactive)
-            }
-            .pickerStyle(.segmented)
 
             HStack(spacing: 8) {
                 TextField("纬度", text: $latitudeText)
@@ -199,10 +178,4 @@ struct MapDashboardView: View {
         guard let latitude = Double(latitudeText), let longitude = Double(longitudeText) else { return }
         repository.select(GeoCoordinate(latitude: latitude, longitude: longitude), title: "手动坐标")
     }
-}
-
-private enum MapDisplayMode: Hashable {
-    case amap
-    case compatibility
-    case interactive
 }
