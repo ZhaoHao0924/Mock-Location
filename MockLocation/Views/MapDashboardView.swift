@@ -5,7 +5,7 @@ struct MapDashboardView: View {
     @EnvironmentObject private var repository: LocationRepository
     @EnvironmentObject private var simulation: LocationSimulationService
     @StateObject private var search = LocationSearch()
-    @State private var mapDisplayMode: MapDisplayMode = .compatibility
+    @State private var mapDisplayMode: MapDisplayMode = .amap
     @State private var mapError: String?
     @State private var mapReloadToken = 0
     @State private var latitudeText = ""
@@ -18,7 +18,9 @@ struct MapDashboardView: View {
             VStack(spacing: 0) {
                 ZStack(alignment: .top) {
                     Group {
-                        if mapDisplayMode == .compatibility {
+                        if mapDisplayMode == .amap {
+                            LocationAMapView(coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
+                        } else if mapDisplayMode == .compatibility {
                             LocationSnapshotMapView(coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
                         } else {
                             LocationMapView(coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
@@ -122,6 +124,7 @@ struct MapDashboardView: View {
             }
 
             Picker("地图模式", selection: $mapDisplayMode) {
+                Text("高德地图").tag(MapDisplayMode.amap)
                 Text("兼容地图").tag(MapDisplayMode.compatibility)
                 Text("互动地图").tag(MapDisplayMode.interactive)
             }
@@ -199,6 +202,7 @@ struct MapDashboardView: View {
 }
 
 private enum MapDisplayMode: Hashable {
+    case amap
     case compatibility
     case interactive
 }
