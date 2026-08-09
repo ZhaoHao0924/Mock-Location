@@ -25,7 +25,7 @@ emit_build_diagnostics() {
     if [[ "${emitted}" -ge 30 ]]; then
       break
     fi
-  done < <(grep -Ei 'error:|fatal error:' "${log_path}" || true)
+  done < <(grep -Ei 'error:|fatal error:|reason:|unable to read|does not exist|malformed|invalid' "${log_path}" || true)
 
   if [[ "${emitted}" -eq 0 ]]; then
     printf '%s\n' '::error title=Build failed::No compiler error line was found; inspect the final xcodebuild output.'
@@ -57,11 +57,18 @@ run_and_capture() {
   run_and_capture xcodegen xcodegen generate --spec project.yml
 ) || exit $?
 
-project_path="${project_root}/MockLocation.xcodeproj"
-test -d "${project_path}" || {
-  echo "::error title=XcodeGen output::Expected project was not generated at ${project_path}." >&2
+project_path=""
+while IFS= read -r candidate; do
+  project_path="${candidate%/project.pbxproj}"
+  break
+done < <(find "${project_root}" -type f -name project.pbxproj -print)
+
+if [[ -z "${project_path}" ]]; then
+  echo "::error title=XcodeGen output::No project.pbxproj was generated under ${project_root}." >&2
+  find "${project_root}" -type d -name '*.xcodeproj' -print >&2 || true
   exit 1
-}
+fi
+echo "::notice title=XcodeGen output::Using generated project ${project_path}"
 
 xcodebuild_args=(
   -project "${project_path}"
