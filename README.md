@@ -27,7 +27,7 @@ branding, source code, or binaries.
 
 ## Build on macOS
 
-1. Install Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+1. Install Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen), and [CocoaPods](https://cocoapods.org/).
 2. Run `bash Scripts/build-trollstore-ipa.sh` in this directory.
 3. Install the generated `MockLocation.ipa` with TrollStore.
 

@@ -2,3 +2,5 @@
 MockLocation.xcodeproj/
 MockLocation.ipa
 DerivedData/
+Pods/
+MockLocation.xcworkspace/

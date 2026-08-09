@@ -4,6 +4,7 @@ struct MapDashboardView: View {
     @EnvironmentObject private var repository: LocationRepository
     @EnvironmentObject private var simulation: LocationSimulationService
     @StateObject private var search = LocationSearch()
+    @State private var amapStyle: AMapMapStyle = .standard
     @State private var mapSource: MapSource = .amap
     @State private var mapError: String?
     @State private var mapReloadToken = 0
@@ -16,9 +17,15 @@ struct MapDashboardView: View {
         NavigationView {
             VStack(spacing: 0) {
                 ZStack(alignment: .top) {
-                    LocationMapProviderView(source: mapSource, coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
-                        .id("\(mapSource.title)-\(mapReloadToken)")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if mapSource == .amap {
+                        LocationAMapSDKView(style: amapStyle, coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
+                            .id("\(mapSource.title)-\(mapReloadToken)")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        LocationMapProviderView(source: .baidu, coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
+                            .id("\(mapSource.title)-\(mapReloadToken)")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                     if let mapError {
                         mapErrorBanner(message: mapError)
                     }
@@ -60,6 +67,7 @@ struct MapDashboardView: View {
             mapError = nil
             mapReloadToken += 1
         }
+        .onChange(of: amapStyle) { _ in mapError = nil }
         .alert("收藏地点", isPresented: $showFavoriteName) {
             TextField("名称", text: $favoriteName)
             Button("保存") { repository.addFavorite(title: favoriteName) }
@@ -127,6 +135,16 @@ struct MapDashboardView: View {
                 Text("百度地图").tag(MapSource.baidu)
             }
             .pickerStyle(.segmented)
+
+            if mapSource == .amap {
+                Picker("\u{5730}\u{56FE}\u{6A21}\u{5F0F}", selection: $amapStyle) {
+                    ForEach(AMapMapStyle.allCases) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
 
             HStack(spacing: 8) {
                 TextField("纬度", text: $latitudeText)

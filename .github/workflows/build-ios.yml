@@ -23,8 +23,8 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Install XcodeGen
-        run: HOMEBREW_NO_REQUIRE_TAP_TRUST=1 brew install xcodegen
+      - name: Install XcodeGen and CocoaPods
+        run: HOMEBREW_NO_REQUIRE_TAP_TRUST=1 brew install xcodegen cocoapods
 
       - name: Build TrollStore IPA
         run: bash Scripts/build-trollstore-ipa.sh

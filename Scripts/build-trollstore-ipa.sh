@@ -55,6 +55,13 @@ run_and_capture() {
 (
   cd "${project_root}"
   run_and_capture xcodegen xcodegen generate --spec project.yml
+  if [[ -f "Podfile" ]]; then
+    command -v pod >/dev/null 2>&1 || {
+      echo "CocoaPods is required when a Podfile is present." >&2
+      exit 1
+    }
+    run_and_capture pod_install pod install --repo-update
+  fi
 ) || exit $?
 
 project_path=""
@@ -70,8 +77,17 @@ if [[ -z "${project_path}" ]]; then
 fi
 echo "::notice title=XcodeGen output::Using generated project ${project_path}"
 
+workspace_path="${project_root}/MockLocation.xcworkspace"
+xcodebuild_container=()
+if [[ -d "${workspace_path}" ]]; then
+  xcodebuild_container=(-workspace "${workspace_path}")
+  echo "::notice title=CocoaPods output::Using generated workspace ${workspace_path}"
+else
+  xcodebuild_container=(-project "${project_path}")
+fi
+
 xcodebuild_args=(
-  -project "${project_path}"
+  "${xcodebuild_container[@]}"
   -scheme MockLocation
   -configuration Release
   -sdk iphoneos
@@ -128,6 +144,12 @@ sign_bundle() {
     echo "The ${bundle_name} entitlements file is missing: ${entitlements_path}" >&2
     exit 1
   }
+
+  if [[ -d "${bundle_path}/Frameworks" ]]; then
+    while IFS= read -r -d '' framework_path; do
+      /usr/bin/codesign --force --sign - --timestamp=none "${framework_path}"
+    done < <(find "${bundle_path}/Frameworks" -depth -type d -name '*.framework' -print0)
+  fi
 
   /usr/bin/codesign \
     --force \

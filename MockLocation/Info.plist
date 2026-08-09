@@ -6,6 +6,8 @@
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleDisplayName</key>
     <string>虚拟定位</string>
+    <key>AMapAPIKey</key>
+    <string>0553aaff118d71dd2effd54c499ae9af</string>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>

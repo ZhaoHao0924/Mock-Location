@@ -2,6 +2,10 @@ import SwiftUI
 
 @main
 struct MockLocationApp: App {
+    init() {
+        AMapSDKConfiguration.configure()
+    }
+
     @StateObject private var repository = LocationRepository()
     @StateObject private var simulation = LocationSimulationService()
 

@@ -645,7 +645,7 @@ private enum BaiduMercator {
     }
 }
 
-private enum ChinaCoordinateConverter {
+enum ChinaCoordinateConverter {
     private static let earthRadius = 6_378_245.0
     private static let eccentricitySquared = 0.006_693_421_622_965_943_23
     private static let bdOffsetFactor = Double.pi * 3_000 / 180
