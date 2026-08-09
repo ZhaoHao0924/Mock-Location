@@ -58,6 +58,32 @@ typedef CFTypeRef (*MockSecTaskCopyFunction)(MockSecTaskRef task, CFStringRef en
     return hasEntitlement;
 }
 
++ (BOOL)hasPlatformApplicationEntitlement {
+    // This privileged XPC service requires both the simulation and platform-app entitlements.
+    MockSecTaskCreateFunction createTask = (MockSecTaskCreateFunction)dlsym(RTLD_DEFAULT, "SecTaskCreateFromSelf");
+    MockSecTaskCopyFunction copyTaskValue = (MockSecTaskCopyFunction)dlsym(RTLD_DEFAULT, "SecTaskCopyValueForEntitlement");
+    if (createTask == NULL || copyTaskValue == NULL) {
+        // The build script verifies the signed entitlement before producing an IPA.
+        return YES;
+    }
+
+    MockSecTaskRef task = createTask(kCFAllocatorDefault);
+    if (task == NULL) {
+        return NO;
+    }
+
+    CFTypeRef value = copyTaskValue(task, CFSTR("platform-application"), NULL);
+    BOOL hasEntitlement = value != NULL &&
+        CFGetTypeID(value) == CFBooleanGetTypeID() &&
+        CFBooleanGetValue((CFBooleanRef)value);
+
+    if (value != NULL) {
+        CFRelease(value);
+    }
+    CFRelease((CFTypeRef)task);
+    return hasEntitlement;
+}
+
 + (BOOL)isAvailable {
     id manager = [self simulationManager];
     if (manager == nil) {
@@ -78,6 +104,9 @@ typedef CFTypeRef (*MockSecTaskCopyFunction)(MockSecTaskRef task, CFStringRef en
     }
     if (![self hasSimulationEntitlement]) {
         return @"This installation is missing the com.apple.locationd.simulation entitlement. Reinstall the signed IPA with TrollStore, then restart the device once.";
+    }
+    if (![self hasPlatformApplicationEntitlement]) {
+        return @"This installation is missing the platform-application entitlement required to talk to locationd. Reinstall the signed IPA with TrollStore, then restart the device once.";
     }
     if (![self isAvailable]) {
         return @"The installed runtime does not expose the required location simulation selectors.";

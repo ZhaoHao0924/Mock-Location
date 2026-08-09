@@ -163,6 +163,7 @@ sign_bundle "${extension_path}" "${project_root}/ShareExtension/ShareExtension.e
 sign_bundle "${app_path}" "${project_root}/MockLocation/MockLocation.entitlements" "main app"
 /usr/bin/codesign --verify --deep --strict "${app_path}"
 assert_signed_entitlement "${app_path}" "com.apple.locationd.simulation" "main app"
+assert_signed_entitlement "${app_path}" "platform-application" "main app"
 
 test -f "${app_path}/Assets.car" || {
   echo "The app icon asset catalog was not compiled into Assets.car." >&2

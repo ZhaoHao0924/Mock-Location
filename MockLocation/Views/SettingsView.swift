@@ -13,6 +13,14 @@ struct SettingsView: View {
                         Spacer()
                         statusText
                     }
+                    switch simulation.state {
+                    case let .unavailable(message), let .failed(message):
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    default:
+                        EmptyView()
+                    }
                     Button {
                         simulation.refreshAvailability()
                     } label: {
