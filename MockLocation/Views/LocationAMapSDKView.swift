@@ -83,7 +83,7 @@ struct LocationAMapSDKView: UIViewRepresentable {
 
         func apply(style: AMapMapStyle, to mapView: MAMapView) {
             mapView.mapType = style.nativeMapType
-            mapView.showsLabels = style.showsLabels
+            mapView.isShowsLabels = style.showsLabels
         }
 
         func updateSelection(on mapView: MAMapView, centerOnSelection: Bool) {

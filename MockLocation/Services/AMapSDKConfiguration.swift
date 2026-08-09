@@ -5,9 +5,7 @@ enum AMapSDKConfiguration {
     static var isConfigured: Bool { !apiKey.isEmpty }
 
     static func configure() {
-        guard isConfigured else { return }
-
-        let services = AMapServices.shared()
+        guard isConfigured, let services = AMapServices.shared() else { return }
         services.enableHTTPS = true
         services.analysisAgree = false
         services.apiKey = apiKey
