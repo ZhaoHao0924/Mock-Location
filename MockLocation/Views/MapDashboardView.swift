@@ -4,6 +4,7 @@ struct MapDashboardView: View {
     @EnvironmentObject private var repository: LocationRepository
     @EnvironmentObject private var simulation: LocationSimulationService
     @StateObject private var search = LocationSearch()
+    @State private var mapSource: MapSource = .amap
     @State private var mapError: String?
     @State private var mapReloadToken = 0
     @State private var latitudeText = ""
@@ -15,8 +16,8 @@ struct MapDashboardView: View {
         NavigationView {
             VStack(spacing: 0) {
                 ZStack(alignment: .top) {
-                    LocationAMapView(coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
-                        .id(mapReloadToken)
+                    LocationMapProviderView(source: mapSource, coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
+                        .id("\(mapSource.title)-\(mapReloadToken)")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     if let mapError {
                         mapErrorBanner(message: mapError)
@@ -47,6 +48,10 @@ struct MapDashboardView: View {
         .navigationViewStyle(.stack)
         .onAppear(perform: syncCoordinateFields)
         .onChange(of: repository.selectedCoordinate) { _ in syncCoordinateFields() }
+        .onChange(of: mapSource) { _ in
+            mapError = nil
+            mapReloadToken += 1
+        }
         .alert("收藏地点", isPresented: $showFavoriteName) {
             TextField("名称", text: $favoriteName)
             Button("保存") { repository.addFavorite(title: favoriteName) }
@@ -108,6 +113,12 @@ struct MapDashboardView: View {
                 Spacer()
                 simulationIndicator
             }
+
+            Picker("地图源", selection: $mapSource) {
+                Text("高德地图").tag(MapSource.amap)
+                Text("百度地图").tag(MapSource.baidu)
+            }
+            .pickerStyle(.segmented)
 
             HStack(spacing: 8) {
                 TextField("纬度", text: $latitudeText)
