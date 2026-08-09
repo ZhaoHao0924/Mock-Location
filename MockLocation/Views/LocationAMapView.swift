@@ -120,7 +120,7 @@ struct LocationAMapView: UIViewRepresentable {
     }
 }
 
-private final class AMapTileContainer: UIView {
+final class AMapTileContainer: UIView {
     var onLayoutChange: ((AMapTileContainer) -> Void)?
     var onLoadSuccess: (() -> Void)?
     var onLoadFailure: ((Error) -> Void)?
