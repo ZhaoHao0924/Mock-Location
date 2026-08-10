@@ -54,9 +54,17 @@ final class AMapMapContainerView: UIView {
         super.init(coder: coder)
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard !bounds.isEmpty else { return }
+        mapView?.frame = bounds
+    }
+
     func attach(_ mapView: MAMapView) {
         self.mapView = mapView
-        mapView.frame = bounds
+        if !bounds.isEmpty {
+            mapView.frame = bounds
+        }
         mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(mapView)
     }
