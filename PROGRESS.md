@@ -30,11 +30,11 @@ Last updated: 2026-08-10 (Asia/Shanghai)
 
 ## Current CI state
 
-The validation run is [31353438462](https://github.com/ZhaoHao0924/Mock-Location/actions/runs/31353438462)
-for commit `d207282` (run #37) and completed successfully. XcodeGen
+The validation run is [31355541330](https://github.com/ZhaoHao0924/Mock-Location/actions/runs/31355541330)
+for commit `c251687` (run #38) and completed successfully. XcodeGen
 generation, the unsigned device build, IPA layout validation, AMap resource
 validation, and artifact upload all passed. The `MockLocation-TrollStore-IPA`
-artifact (ID `9049913516`, about 20.7 MB) is available until 2026-09-09.
+artifact (ID `9050543427`, about 20.7 MB) is available until 2026-09-09.
 
 ## Current debugging status
 
@@ -49,7 +49,7 @@ the map remains blank.
 
 ## Crash fix implementation
 
-The AMap startup crash, zero-frame, privacy, and resource-configuration fixes are implemented and passed CI:
+The AMap startup crash, zero-frame, privacy, resource, and display-lifecycle fixes are implemented and passed CI:
 
 - `MockLocation/MockLocation-Bridging-Header.h` imports the Objective-C map
   view factory.
@@ -58,7 +58,8 @@ The AMap startup crash, zero-frame, privacy, and resource-configuration fixes ar
   the required privacy state, and explicitly configure AMap resources.
 - `MockLocation/Views/LocationAMapSDKView.swift` now hosts the optional map
   view in an `AMapMapContainerView`, keeps a non-empty initialization frame,
-  and reports creation failure in the UI.
+  refreshes after UIKit visibility, and reports creation and loading failures
+  in the UI.
 
 ## Validation status
 
@@ -68,7 +69,7 @@ The AMap startup crash, zero-frame, privacy, and resource-configuration fixes ar
 
 ## Next session
 
-1. Download artifact `9049913516` and install the generated IPA with TrollStore.
+1. Download artifact `9050543427` and install the generated IPA with TrollStore.
 2. Delete the old app before installing the new IPA, then verify that the app
    opens and that AMap tiles load on the iOS 15.6.1 test device.
 
