@@ -30,11 +30,11 @@ Last updated: 2026-08-10 (Asia/Shanghai)
 
 ## Current CI state
 
-The validation run is [31355541330](https://github.com/ZhaoHao0924/Mock-Location/actions/runs/31355541330)
-for commit `c251687` (run #38) and completed successfully. XcodeGen
+The validation run is [31358588478](https://github.com/ZhaoHao0924/Mock-Location/actions/runs/31358588478)
+for commit `146bece` (run #40) and completed successfully. XcodeGen
 generation, the unsigned device build, IPA layout validation, AMap resource
 validation, and artifact upload all passed. The `MockLocation-TrollStore-IPA`
-artifact (ID `9050543427`, about 20.7 MB) is available until 2026-09-09.
+artifact (ID `9051552582`, about 20.7 MB) is available until 2026-09-09.
 
 ## Current debugging status
 
@@ -43,23 +43,27 @@ The nullable factory prevents the startup crash on iOS 15.6.1 with TrollStore
 map view; the current build initializes the required privacy state, sets the
 AMap resource bundle path and language before creation, uses a non-empty
 screen frame, and synchronizes the real container bounds after SwiftUI layout.
-The map view now waits for a visible nonzero container before it applies its
-configuration, forces a refresh, and emits loading lifecycle diagnostics when
-the map remains blank.
+The earlier hard-coded key was not supplied for this app's Bundle ID. The
+current build removes it, waits for the owner to save an iOS platform key, and
+shows the actual Bundle ID in Settings before it initializes the map SDK.
 
 ## Crash fix implementation
 
-The AMap startup crash, zero-frame, privacy, resource, and display-lifecycle fixes are implemented and passed CI:
+The AMap startup crash, zero-frame, privacy, resource, display-lifecycle, and user-key configuration fixes are implemented and passed CI:
 
 - `MockLocation/MockLocation-Bridging-Header.h` imports the Objective-C map
   view factory.
 - `MockLocation/Services/AMapMapViewFactory.h` and `.m` expose nullable
-  `MAMapView` creation without Swift's non-optional initializer bridge, set
+  `MAMapView` creation without Swift's non-optional initializer bridge, prepare
   the required privacy state, and explicitly configure AMap resources.
+- `MockLocation/Services/AMapSDKConfiguration.swift` stores only a
+  user-provided iOS key and configures it after the native SDK is prepared.
 - `MockLocation/Views/LocationAMapSDKView.swift` now hosts the optional map
   view in an `AMapMapContainerView`, keeps a non-empty initialization frame,
   refreshes after UIKit visibility, and reports creation and loading failures
   in the UI.
+- `MockLocation/Views/SettingsView.swift` displays the exact Bundle ID and
+  provides the key-entry workflow.
 
 ## Validation status
 
@@ -69,9 +73,10 @@ The AMap startup crash, zero-frame, privacy, resource, and display-lifecycle fix
 
 ## Next session
 
-1. Download artifact `9050543427` and install the generated IPA with TrollStore.
-2. Delete the old app before installing the new IPA, then verify that the app
-   opens and that AMap tiles load on the iOS 15.6.1 test device.
+1. Download artifact `9051552582` and install the generated IPA with TrollStore.
+2. In the AMap console, create an iOS platform SDK key bound to
+   `com.personal.mocklocation`.
+3. In the app, open Settings > 高德地图, paste that key, then return to the map.
 
 Local development cannot run the iOS build because this workstation is Windows
 and has no Xcode, `xcodebuild`, or XcodeGen toolchain.
