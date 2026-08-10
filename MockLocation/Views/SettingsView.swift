@@ -63,12 +63,16 @@ struct SettingsView: View {
 
     private var amapKeySection: some View {
         Section {
-            // Deliberately no .textContentType(.password): that marks the field
-            // as a password, and iOS then gives the long-press menu over to
-            // AutoFill, which can push 粘贴 out of the menu entirely.
-            SecureField("iOS Key", text: $amapAPIKey)
+            // A plain TextField, not SecureField. The Key lives in UserDefaults
+            // as plaintext, so masking it bought no security while making paste
+            // awkward and hiding whether a paste actually landed. Also no
+            // .textContentType(.password): that marks the field as a password
+            // and iOS hands the long-press menu to AutoFill, which can push
+            // 粘贴 out of the menu entirely.
+            TextField("iOS Key", text: $amapAPIKey)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .font(.system(.body, design: .monospaced))
 
             HStack(alignment: .firstTextBaseline) {
                 Text("Key 长度")
@@ -152,16 +156,37 @@ struct SettingsView: View {
     }
 
     /// Reads the clipboard directly instead of relying on the long-press menu.
-    /// Keys copied from the 高德 console often carry a trailing newline, so trim.
+    /// `.string` alone is not enough: depending on what the source app wrote,
+    /// the text can be reachable only through an explicit pasteboard type. When
+    /// nothing is readable, report what the pasteboard actually claims to hold
+    /// instead of guessing why — the same instrument-first approach that settled
+    /// the Metal question.
     private func pasteAMapAPIKeyFromClipboard() {
-        guard let pasted = UIPasteboard.general.string else {
-            amapKeySaveNotice = AMapKeySaveNotice(
-                title: "剪贴板为空",
-                message: "没有从剪贴板读到文本。请先在高德控制台复制 Key。"
-            )
+        let pasteboard = UIPasteboard.general
+        let plainType = "public.utf8-plain-text"
+        let candidates: [String?] = [
+            pasteboard.string,
+            pasteboard.value(forPasteboardType: plainType) as? String,
+            pasteboard.data(forPasteboardType: plainType)
+                .flatMap { String(data: $0, encoding: .utf8) }
+        ]
+
+        let usable = candidates
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+
+        if let usable {
+            amapAPIKey = usable
             return
         }
-        amapAPIKey = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let types = pasteboard.types
+        amapKeySaveNotice = AMapKeySaveNotice(
+            title: "读不到剪贴板",
+            message: "条目数 \(pasteboard.numberOfItems)，可用类型："
+                + (types.isEmpty ? "无" : types.joined(separator: ", "))
+                + "。条目数为 0 且类型为空，说明本进程被拒绝读取剪贴板，而不是没复制内容。"
+        )
     }
 
     private var keyLengthState: String {
