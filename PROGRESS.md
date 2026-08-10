@@ -68,17 +68,35 @@ is iOS平台, iOS地图SDK is among the enabled services, and 安全码Bundle ID
 `com.personal.mocklocation`. 安全密钥 showing `—` is expected on iOS, where the
 Bundle ID is the binding.
 
-Three candidates remain. All three produce this same signature — engine
-initialized, zero tile requests attempted, logo drawn:
+One flaw in the reasoning above survived two rounds and has to be retired: a
+zero `tileLoadCallback` count was read as proof that no tile request was ever
+issued. That property is not confirmed to be wired to the base map's internal
+tile pipeline, so it can legitimately read zero on a completely healthy map.
+Nothing about authentication follows from it, and the earlier Key conclusion
+rested on exactly that step.
 
-1. The 3D resource path was never actually applied. `setBundlePath:` had its
+What the delegate callbacks do establish is narrower and more useful.
+`mapViewDidFinishLoadingMap` fired, so the engine considers its map data
+loaded. Loaded data plus a blank screen points at the render surface never
+producing a frame — not at the network, and not at the Key.
+
+The 高德 logo is a UIKit subview of `MAMapView`. It draws through the normal
+view hierarchy no matter what the renderer does, so its presence was never
+evidence that rendering worked. Two candidates remain, ranked:
+
+1. Metal device creation or GPU userclient access fails under the ad-hoc
+   TrollStore signature. The entitlements already carry `AGXDeviceUserClient`
+   and `IOSurfaceRootUserClient`, added by an earlier session when the GPU was
+   suspected, and `setMetalEnabled:YES` forced the Metal path with no fallback.
+2. The 3D resource path was never actually applied. `setBundlePath:` had its
    return value treated as `0 == success`, which the SDK headers do not
    document. If 0 means failure there, the `resourceStatus == 0` guard in
    `LocationAMapSDKView` was passing precisely when the path had not been set.
-2. Metal device creation fails under the ad-hoc TrollStore signature. The 高德
-   logo is a UIKit subview, so it draws regardless of renderer state.
-3. The authentication request never completes — a transport-level problem
-   distinct from tile fetching, which is why no tile request is ever attempted.
+
+Rather than guess a third time, the build now instruments this.
+`AMapMapViewFactory.isMetalAvailable` probes `MTLCreateSystemDefaultDevice()`,
+the renderer is switchable at runtime under Settings > 高德地图, and the
+diagnostic banner reports both. `Metal 设备 不可用` there would be conclusive.
 
 `AMapSDKConfiguration.isApplied` is misleading independent of all this: it only
 compares `AMapServices.shared().apiKey` against the stored string, proving a
@@ -95,7 +113,7 @@ an explicit opt-in.
 `setBundlePath:` return value. It still validates bundle contents and the
 version against `MAMapKitVersion`, but it now only overrides the SDK's own
 lookup when `AMap.bundle` is missing from the main bundle, and ignores the
-return value. This removes candidate 1 above as a silent failure mode.
+return value. This removes candidate 2 above as a silent failure mode.
 
 ## Previous debugging status
 

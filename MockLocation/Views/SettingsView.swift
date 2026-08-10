@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var showingResetConfirmation = false
     @State private var amapAPIKey = AMapSDKConfiguration.storedAPIKey
     @AppStorage(AMapSDKConfiguration.useNativeSDKDefaultsKey) private var preferNativeAMapSDK = false
+    @AppStorage(AMapSDKConfiguration.metalEnabledDefaultsKey) private var metalEnabled = true
     @State private var amapKeySaveNotice: AMapKeySaveNotice?
 
     var body: some View {
@@ -95,15 +96,31 @@ struct SettingsView: View {
                         Label("清除 Key", systemImage: "trash")
                     }
                 }
+
+                Toggle(isOn: $metalEnabled) {
+                    Text("使用 Metal 渲染")
+                }
+
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Metal 设备")
+                    Spacer()
+                    Text(metalDeviceState)
+                        .font(.footnote)
+                        .foregroundColor(AMapMapViewFactory.isMetalAvailable() ? .secondary : .orange)
+                }
             }
         } header: {
             Text("高德地图")
         } footer: {
             Text(preferNativeAMapSDK
-                 ? "原生 SDK 要求 Key 的平台为「iOS」且绑定的 Bundle ID 与上面完全一致。平台或 Bundle ID 不匹配时，高德会拒绝鉴权，SDK 不会发出任何瓦片请求，底图保持空白。"
-                 : "当前使用免 Key 栅格底图，直接取高德公开瓦片服务，不需要 API Key，也不受鉴权与私有权限影响。")
+                 ? "原生 SDK 的 Key 平台需为「iOS」且 Bundle ID 与上面一致。如果地图数据显示已加载完成但画面空白，那是渲染器没有出帧，可切换上面的 Metal 开关；切换后需要完全退出并重新打开应用才生效。"
+                 : "当前使用免 Key 栅格底图，直接取高德公开瓦片服务，不需要 API Key，也不受鉴权、渲染器与私有权限影响。")
                 .font(.footnote)
         }
+    }
+
+    private var metalDeviceState: String {
+        AMapMapViewFactory.isMetalAvailable() ? "可用" : "不可用"
     }
 
     private func saveAMapAPIKey() {

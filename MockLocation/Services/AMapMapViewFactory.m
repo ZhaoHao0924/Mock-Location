@@ -2,6 +2,18 @@
 #import <MAMapKit/MAMapView.h>
 #import <MAMapKit/MAMapView+Resource.h>
 #import <MAMapKit/MAMapVersion.h>
+#import <Metal/Metal.h>
+
+/// Must match `AMapSDKConfiguration.metalEnabledDefaultsKey` on the Swift side.
+static NSString *const AMapMetalEnabledDefaultsKey = @"amap-metal-enabled";
+
+static BOOL AMapMetalPreferenceEnabled(void) {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:AMapMetalEnabledDefaultsKey] == nil) {
+        return YES;
+    }
+    return [defaults boolForKey:AMapMetalEnabledDefaultsKey];
+}
 
 static NSString * _Nullable AMapResourceBundlePath(void) {
     NSString *bundlePath = [[NSBundle mainBundle] pathForResource:@"AMap" ofType:@"bundle"];
@@ -73,11 +85,21 @@ static NSString * _Nullable AMapResourceBundlePath(void) {
     return status;
 }
 
++ (BOOL)isMetalAvailable {
+    return MTLCreateSystemDefaultDevice() != nil;
+}
+
++ (BOOL)isMetalPreferred {
+    return AMapMetalPreferenceEnabled();
+}
+
 + (NSInteger)prepareSDK {
     NSInteger status = [self resourceBundleStatus];
-    // The iOS 15 deployment target guarantees Metal support and avoids the
-    // legacy OpenGLES renderer path in an unsigned TrollStore installation.
-    [MAMapView setMetalEnabled:YES];
+    // Metal is the default renderer, but the choice is switchable at runtime.
+    // A TrollStore ad-hoc signature can be denied the GPU userclients the Metal
+    // path needs, and that failure is silent: the map reports a completed load
+    // while its render surface never produces a frame.
+    [MAMapView setMetalEnabled:AMapMetalPreferenceEnabled()];
     // AMap 8+ requires privacy status before the first map view is created.
     [MAMapView updatePrivacyShow:AMapPrivacyShowStatusDidShow
                      privacyInfo:AMapPrivacyInfoStatusDidContain];

@@ -28,6 +28,7 @@ targets:
     dependencies:
       - sdk: CoreLocation.framework
       - sdk: MapKit.framework
+      - sdk: Metal.framework
       - sdk: Security.framework
       - sdk: UIKit.framework
       - target: MockLocationShare
