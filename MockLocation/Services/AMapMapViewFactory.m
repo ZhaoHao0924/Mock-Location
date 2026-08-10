@@ -10,6 +10,11 @@
     if (CGRectIsEmpty(frame)) {
         frame = CGRectMake(0.0, 0.0, 1.0, 1.0);
     }
+
+    // AMap 8+ requires privacy status before the first map view is created.
+    [MAMapView updatePrivacyShow:AMapPrivacyShowStatusDidShow
+                     privacyInfo:AMapPrivacyInfoStatusDidContain];
+    [MAMapView updatePrivacyAgree:AMapPrivacyAgreeStatusDidAgree];
     return [[MAMapView alloc] initWithFrame:frame];
 }
 @end

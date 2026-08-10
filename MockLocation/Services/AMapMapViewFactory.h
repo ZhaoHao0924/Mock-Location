@@ -1,6 +1,5 @@
 #import <UIKit/UIKit.h>
-
-@class MAMapView;
+#import <MAMapKit/MAMapView.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
