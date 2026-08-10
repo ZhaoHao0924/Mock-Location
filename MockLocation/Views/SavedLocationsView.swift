@@ -12,7 +12,7 @@ struct SavedLocationsView: View {
                         Text("暂无收藏地点").foregroundColor(.secondary)
                     }
                     ForEach(repository.favorites) { location in
-                        locationRow(location, allowDelete: true)
+                        locationRow(location) { repository.deleteFavorite(location) }
                     }
                 }
 
@@ -21,7 +21,7 @@ struct SavedLocationsView: View {
                         Text("暂无最近使用地点").foregroundColor(.secondary)
                     }
                     ForEach(repository.recentLocations) { location in
-                        locationRow(location, allowDelete: false)
+                        locationRow(location) { repository.deleteRecent(location) }
                     }
                 } header: {
                     HStack {
@@ -60,7 +60,7 @@ struct SavedLocationsView: View {
         .navigationViewStyle(.stack)
     }
 
-    private func locationRow(_ location: SavedLocation, allowDelete: Bool) -> some View {
+    private func locationRow(_ location: SavedLocation, delete: @escaping () -> Void) -> some View {
         Button {
             repository.select(location.coordinate, title: location.title)
         } label: {
@@ -70,10 +70,8 @@ struct SavedLocationsView: View {
             }
         }
         .swipeActions {
-            if allowDelete {
-                Button(role: .destructive) { repository.deleteFavorite(location) } label: {
-                    Label("删除", systemImage: "trash")
-                }
+            Button(role: .destructive, action: delete) {
+                Label("删除", systemImage: "trash")
             }
             Button {
                 simulation.startPoint(location.coordinate, title: location.title)

@@ -45,6 +45,11 @@ final class LocationRepository: ObservableObject {
         persist(favorites, key: Key.favorites)
     }
 
+    func deleteRecent(_ recent: SavedLocation) {
+        recentLocations.removeAll { $0.id == recent.id }
+        persist(recentLocations, key: Key.recents)
+    }
+
     func clearRecents() {
         recentLocations = []
         persist(recentLocations, key: Key.recents)
