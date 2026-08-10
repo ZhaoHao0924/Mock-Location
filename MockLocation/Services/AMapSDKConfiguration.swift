@@ -27,7 +27,7 @@ enum AMapSDKConfiguration {
         let keySuffix = key.isEmpty ? "-" : String(key.suffix(4))
         let keyState = isApplied ? "已写入 SDK" : "未写入"
         let resourceVersion = AMapMapViewFactory.resourceBundleVersion() ?? "未识别"
-        let renderer = AMapMapViewFactory.isMetalPreferred() ? "Metal" : "GLES"
+        let renderer = AMapMapViewFactory.isMetalEffective() ? "Metal" : "GLES"
         let metalState = AMapMapViewFactory.isMetalAvailable() ? "可用" : "不可用"
         return "Bundle ID \(bundleID)；Key \(key.count) 位 / 末四位 \(keySuffix) / \(keyState)；3D 资源 \(resourceVersion)；渲染器 \(renderer)；Metal 设备 \(metalState)"
     }

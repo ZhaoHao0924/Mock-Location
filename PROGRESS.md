@@ -98,6 +98,18 @@ Rather than guess a third time, the build now instruments this.
 the renderer is switchable at runtime under Settings > 高德地图, and the
 diagnostic banner reports both. `Metal 设备 不可用` there would be conclusive.
 
+Device confirmation: the key-free 高德 raster path and 百度 both render correctly
+on the target device. That isolates the fault to the native SDK's interior. The
+network, tile transport, ATS configuration, the GCJ-02/BD-09 projection code,
+and the SwiftUI/UIKit view hierarchy are all proven good by the working raster
+maps, and candidate 1 is what remains.
+
+`prepareSDK` therefore no longer hands Metal to the SDK when
+`MTLCreateSystemDefaultDevice()` returns nil. The GLES fallback engages on its
+own rather than depending on the user finding the Settings toggle. This is a
+correctness fix independent of the diagnosis: forcing a renderer the process
+cannot create was wrong regardless of what the device reports.
+
 `AMapSDKConfiguration.isApplied` is misleading independent of all this: it only
 compares `AMapServices.shared().apiKey` against the stored string, proving a
 local property assignment and nothing about the server's answer. Its label now
@@ -176,12 +188,13 @@ user-key configuration fixes are implemented and passed CI:
    without any Key, with 标准 and 卫星 both selectable.
 3. If that raster map renders, the blank-base-map issue is resolved for normal
    use and the native SDK path is optional.
-4. The Key is confirmed correct, so pursuing the native SDK further needs device
-   evidence rather than more code guesses. Enable Settings > 高德地图 >
-   使用高德原生 SDK, reproduce the blank map, and capture the device console
-   (TrollStore permits a console reader). 高德 logs its authentication result and
-   resource-load errors to stderr; that output separates candidate 2 (Metal)
-   from candidate 3 (transport) directly.
+4. The native SDK is now optional and the raster path covers real use. To settle
+   it anyway, enable Settings > 高德地图 > 使用高德原生 SDK and read the
+   diagnostic banner. `Metal 设备 不可用` confirms candidate 1 outright. If it
+   reads 可用 while the map is still blank, the automatic fallback did not apply,
+   so turn the Metal toggle off, fully quit, and reopen. If GLES also renders
+   nothing, the remaining step is the device console: 高德 logs authentication
+   and resource-load errors to stderr, and TrollStore permits a console reader.
 
 Local development cannot run the iOS build because this workstation is Windows
 and has no Xcode, `xcodebuild`, or XcodeGen toolchain.

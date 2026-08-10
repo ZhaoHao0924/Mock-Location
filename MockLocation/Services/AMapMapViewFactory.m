@@ -93,13 +93,17 @@ static NSString * _Nullable AMapResourceBundlePath(void) {
     return AMapMetalPreferenceEnabled();
 }
 
++ (BOOL)isMetalEffective {
+    return AMapMetalPreferenceEnabled() && [self isMetalAvailable];
+}
+
 + (NSInteger)prepareSDK {
     NSInteger status = [self resourceBundleStatus];
-    // Metal is the default renderer, but the choice is switchable at runtime.
-    // A TrollStore ad-hoc signature can be denied the GPU userclients the Metal
-    // path needs, and that failure is silent: the map reports a completed load
-    // while its render surface never produces a frame.
-    [MAMapView setMetalEnabled:AMapMetalPreferenceEnabled()];
+    // Never hand Metal to the SDK when this process cannot create a Metal
+    // device. An ad-hoc TrollStore signature can be denied the GPU userclients
+    // the Metal path needs, and the failure is silent: the map reports a
+    // completed load while its render surface never produces a frame.
+    [MAMapView setMetalEnabled:[self isMetalEffective]];
     // AMap 8+ requires privacy status before the first map view is created.
     [MAMapView updatePrivacyShow:AMapPrivacyShowStatusDidShow
                      privacyInfo:AMapPrivacyInfoStatusDidContain];
