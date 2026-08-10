@@ -110,6 +110,35 @@ own rather than depending on the user finding the Settings toggle. This is a
 correctness fix independent of the diagnosis: forcing a renderer the process
 cannot create was wrong regardless of what the device reports.
 
+## Root cause: the GPU entitlements were inert
+
+The device reports 渲染器 GLES / Metal 设备 不可用, so
+`MTLCreateSystemDefaultDevice()` returns nil and the process cannot create a
+Metal device at all. Every device running iOS 15.6.1 has Metal-capable
+hardware, so this is an access denial, not a capability gap.
+
+`MockLocation.entitlements` declared `AGXDeviceUserClient` and
+`IOSurfaceRootUserClient` as bare boolean keys. Those are IOKit user client
+*class names*, not entitlement keys — nothing in the kernel checks for an
+entitlement by either name, so both were inert and GPU access was never
+granted. The build script compounded it by asserting both keys were `true` in
+the signed blob, which passed trivially and looked like proof that GPU access
+had been provisioned. The correct form puts those names as *values* of
+`com.apple.security.exception.iokit-user-client-class`, which is now what both
+the entitlements file and the build script use.
+
+Why the raster maps were unaffected: UIKit layer content is composited
+out-of-process by the render server, so `UIImageView` tiles need no GPU
+userclient in this process. An in-process Metal or GLES renderer does. That is
+also why the GLES fallback was never likely to help on its own — GLES reaches
+the GPU through the same AGX userclients.
+
+If this does not fix it, `com.apple.private.security.no-sandbox` is the next
+suspect: running outside the container profile may be what dropped the GPU
+grants every normal app receives. Removing it would restore them, but
+`PrivateLocationBridge` currently requires it, so that is a trade-off needing a
+decision rather than a guess.
+
 `AMapSDKConfiguration.isApplied` is misleading independent of all this: it only
 compares `AMapServices.shared().apiKey` against the stored string, proving a
 local property assignment and nothing about the server's answer. Its label now

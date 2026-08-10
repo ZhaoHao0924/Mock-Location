@@ -8,10 +8,16 @@
     <true/>
     <key>com.apple.private.security.no-sandbox</key>
     <true/>
-    <key>AGXDeviceUserClient</key>
-    <true/>
-    <key>IOSurfaceRootUserClient</key>
-    <true/>
+    <!-- AGXDeviceUserClient and IOSurfaceRootUserClient are IOKit user client
+         class names, not entitlement keys. As bare booleans they were inert:
+         nothing in the kernel checks for an entitlement by those names, so GPU
+         access was never actually granted and MTLCreateSystemDefaultDevice
+         returned nil. They only grant access as values of this exception. -->
+    <key>com.apple.security.exception.iokit-user-client-class</key>
+    <array>
+        <string>AGXDeviceUserClient</string>
+        <string>IOSurfaceRootUserClient</string>
+    </array>
     <key>com.apple.security.application-groups</key>
     <array>
         <string>group.com.personal.mocklocation</string>

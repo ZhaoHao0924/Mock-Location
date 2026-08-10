@@ -222,6 +222,28 @@ assert_signed_entitlement() {
   fi
 }
 
+assert_signed_iokit_exception() {
+  local bundle_path="$1"
+  local bundle_name="$2"
+  local entitlements_dump="${build_root}/$(basename "${bundle_path}").signed-entitlements.plist"
+  local class_name
+
+  /usr/bin/codesign -d --entitlements :- --xml "${bundle_path}" > "${entitlements_dump}" 2> "${entitlements_dump}.log" || {
+    echo "Unable to read the ${bundle_name} signature entitlements." >&2
+    cat "${entitlements_dump}.log" >&2 || true
+    exit 1
+  }
+
+  for class_name in AGXDeviceUserClient IOSurfaceRootUserClient; do
+    /usr/libexec/PlistBuddy -c "Print :com.apple.security.exception.iokit-user-client-class" \
+      "${entitlements_dump}" 2>/dev/null | grep -q "${class_name}" || {
+      echo "The ${bundle_name} signature is missing IOKit user client class ${class_name}." >&2
+      cat "${entitlements_dump}" >&2 || true
+      exit 1
+    }
+  done
+}
+
 # TrollStore can only grant the private entitlement when it is embedded in the IPA signature.
 sign_bundle "${extension_path}" "${project_root}/ShareExtension/ShareExtension.entitlements" "share extension"
 sign_bundle "${app_path}" "${project_root}/MockLocation/MockLocation.entitlements" "main app"
@@ -229,8 +251,7 @@ sign_bundle "${app_path}" "${project_root}/MockLocation/MockLocation.entitlement
 assert_signed_entitlement "${app_path}" "com.apple.locationd.simulation" "main app"
 assert_signed_entitlement "${app_path}" "platform-application" "main app"
 assert_signed_entitlement "${app_path}" "com.apple.private.security.no-sandbox" "main app"
-assert_signed_entitlement "${app_path}" "AGXDeviceUserClient" "main app"
-assert_signed_entitlement "${app_path}" "IOSurfaceRootUserClient" "main app"
+assert_signed_iokit_exception "${app_path}" "main app"
 
 test -f "${app_path}/Assets.car" || {
   echo "The app icon asset catalog was not compiled into Assets.car." >&2
