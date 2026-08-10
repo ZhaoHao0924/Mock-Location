@@ -8,6 +8,7 @@ struct MapDashboardView: View {
     @State private var mapSource: MapSource = .amap
     @State private var mapError: String?
     @State private var mapReloadToken = 0
+    @AppStorage(AMapSDKConfiguration.apiKeyDefaultsKey) private var amapAPIKey = ""
     @State private var latitudeText = ""
     @State private var longitudeText = ""
     @State private var showFavoriteName = false
@@ -18,9 +19,15 @@ struct MapDashboardView: View {
             VStack(spacing: 0) {
                 ZStack(alignment: .top) {
                     if mapSource == .amap {
-                        LocationAMapSDKView(style: amapStyle, coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
-                            .id("\(mapSource.title)-\(mapReloadToken)")
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if hasAMapAPIKey {
+                            LocationAMapSDKView(style: amapStyle, coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
+                                .id("\(mapSource.title)-\(mapReloadToken)")
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            amapKeyPlaceholder
+                                .id("\(mapSource.title)-\(mapReloadToken)")
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
                     } else {
                         LocationMapProviderView(source: .baidu, coordinate: $repository.selectedCoordinate, title: $repository.selectedTitle, mapError: $mapError)
                             .id("\(mapSource.title)-\(mapReloadToken)")
@@ -73,6 +80,24 @@ struct MapDashboardView: View {
             Button("保存") { repository.addFavorite(title: favoriteName) }
             Button("取消", role: .cancel) { }
         }
+    }
+
+    private var hasAMapAPIKey: Bool {
+        !amapAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var amapKeyPlaceholder: some View {
+        Color.secondary.opacity(0.12)
+            .overlay {
+                VStack(spacing: 8) {
+                    Image(systemName: "key.horizontal")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                    Text("未配置高德地图 iOS Key")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
     }
 
     private var searchResults: some View {

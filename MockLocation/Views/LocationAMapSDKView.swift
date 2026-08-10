@@ -104,7 +104,8 @@ struct LocationAMapSDKView: UIViewRepresentable {
         container.onMapReadyForDisplay = { [weak coordinator = context.coordinator] mapView in
             coordinator?.mapBecameReadyForDisplay(mapView)
         }
-        let resourceStatus = AMapMapViewFactory.resourceBundleStatus()
+        let resourceStatus = AMapMapViewFactory.prepareSDK()
+        AMapSDKConfiguration.configure()
         guard let mapView = AMapMapViewFactory.mapView(withFrame: .zero) else {
             context.coordinator.setMapError("\(MapSource.amap.title) SDK \u{65E0}\u{6CD5}\u{521B}\u{5EFA}\u{5730}\u{56FE}\u{89C6}\u{56FE}\u{3002}")
             return container

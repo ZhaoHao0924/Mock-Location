@@ -37,6 +37,12 @@ TrollStore applies its own installation signature. The development target is
 iOS 15. The private bridge checks for the required runtime selectors before it
 changes any location state, so unsupported OS versions fail closed.
 
+## AMap key
+
+The native AMap view requires an iOS API Key registered for the app Bundle ID
+`com.personal.mocklocation`. After installation, enter your own key under
+Settings > 高德地图. A Web Service Key cannot load the native iOS map.
+
 ## Project layout
 
 - `MockLocation/` - main SwiftUI application and Objective-C runtime bridge

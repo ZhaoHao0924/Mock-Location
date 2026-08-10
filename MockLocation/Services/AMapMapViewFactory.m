@@ -23,6 +23,15 @@
     return status;
 }
 
++ (NSInteger)prepareSDK {
+    NSInteger status = [self resourceBundleStatus];
+    // AMap 8+ requires privacy status before the first map view is created.
+    [MAMapView updatePrivacyShow:AMapPrivacyShowStatusDidShow
+                     privacyInfo:AMapPrivacyInfoStatusDidContain];
+    [MAMapView updatePrivacyAgree:AMapPrivacyAgreeStatusDidAgree];
+    return status;
+}
+
 + (MAMapView * _Nullable)mapViewWithFrame:(CGRect)frame {
     if (CGRectIsEmpty(frame) || CGRectGetWidth(frame) < 1.0 || CGRectGetHeight(frame) < 1.0) {
         frame = [UIScreen mainScreen].bounds;
@@ -31,14 +40,10 @@
         frame = CGRectMake(0.0, 0.0, 1.0, 1.0);
     }
 
+    [self prepareSDK];
+
     AMapServices *services = [AMapServices sharedServices];
     services.regionLanguageType = AMapRegionLanguageTypeZhHans;
-    [self resourceBundleStatus];
-
-    // AMap 8+ requires privacy status before the first map view is created.
-    [MAMapView updatePrivacyShow:AMapPrivacyShowStatusDidShow
-                     privacyInfo:AMapPrivacyInfoStatusDidContain];
-    [MAMapView updatePrivacyAgree:AMapPrivacyAgreeStatusDidAgree];
     return [[MAMapView alloc] initWithFrame:frame];
 }
 @end
