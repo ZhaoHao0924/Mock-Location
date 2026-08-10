@@ -25,6 +25,9 @@
 
 + (NSInteger)prepareSDK {
     NSInteger status = [self resourceBundleStatus];
+    // The iOS 15 deployment target guarantees Metal support and avoids the
+    // legacy OpenGLES renderer path in an unsigned TrollStore installation.
+    [MAMapView setMetalEnabled:YES];
     // AMap 8+ requires privacy status before the first map view is created.
     [MAMapView updatePrivacyShow:AMapPrivacyShowStatusDidShow
                      privacyInfo:AMapPrivacyInfoStatusDidContain];
@@ -44,6 +47,9 @@
 
     AMapServices *services = [AMapServices sharedServices];
     services.regionLanguageType = AMapRegionLanguageTypeZhHans;
-    return [[MAMapView alloc] initWithFrame:frame];
+    MAMapView *mapView = [[MAMapView alloc] initWithFrame:frame];
+    mapView.renderringDisabled = NO;
+    mapView.drawingDisabled = NO;
+    return mapView;
 }
 @end

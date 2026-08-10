@@ -104,8 +104,8 @@ struct LocationAMapSDKView: UIViewRepresentable {
         container.onMapReadyForDisplay = { [weak coordinator = context.coordinator] mapView in
             coordinator?.mapBecameReadyForDisplay(mapView)
         }
-        let resourceStatus = AMapMapViewFactory.prepareSDK()
         AMapSDKConfiguration.configure()
+        let resourceStatus = AMapMapViewFactory.prepareSDK()
         guard let mapView = AMapMapViewFactory.mapView(withFrame: .zero) else {
             context.coordinator.setMapError("\(MapSource.amap.title) SDK \u{65E0}\u{6CD5}\u{521B}\u{5EFA}\u{5730}\u{56FE}\u{89C6}\u{56FE}\u{3002}")
             return container
@@ -146,6 +146,8 @@ struct LocationAMapSDKView: UIViewRepresentable {
         private var didStartLoadingMap = false
         private var didFinishLoadingMap = false
         private var didFailLoadingMap = false
+        private var successfulTileCount = 0
+        private var failedTileCount = 0
         private var didReportLoadWatchdog = false
         private var loadWatchdog: DispatchWorkItem?
 
@@ -159,6 +161,14 @@ struct LocationAMapSDKView: UIViewRepresentable {
 
         func register(_ mapView: MAMapView) {
             registeredMapView = mapView
+            mapView.tileLoadCallback = { [weak self] success, _, _ in
+                DispatchQueue.main.async {
+                    self?.recordTileLoad(success: success)
+                }
+            }
+            // Start the watchdog immediately. This still reports a useful
+            // error if SwiftUI never gives the map container a visible layout.
+            scheduleLoadWatchdog(for: mapView)
         }
 
         func mapBecameReadyForDisplay(_ mapView: MAMapView) {
@@ -233,6 +243,16 @@ struct LocationAMapSDKView: UIViewRepresentable {
             didInitializeMap = true
         }
 
+        private func recordTileLoad(success: Bool) {
+            if success {
+                successfulTileCount += 1
+                loadWatchdog?.cancel()
+                setMapError(nil)
+            } else {
+                failedTileCount += 1
+            }
+        }
+
         func mapView(_ mapView: MAMapView!, didChangeOpenGLESDisabled openGLESDisabled: Bool) {
             guard openGLESDisabled else { return }
             loadWatchdog?.cancel()
@@ -264,10 +284,13 @@ struct LocationAMapSDKView: UIViewRepresentable {
             loadWatchdog?.cancel()
             let watchdog = DispatchWorkItem { [weak self, weak mapView] in
                 guard let self, let mapView, self.registeredMapView === mapView,
-                      !self.didFinishLoadingMap, !self.didFailLoadingMap else { return }
+                      !self.didFinishLoadingMap, !self.didFailLoadingMap,
+                      self.successfulTileCount == 0 else { return }
 
                 self.didReportLoadWatchdog = true
-                if self.didInitializeMap && self.didStartLoadingMap {
+                if self.failedTileCount > 0 {
+                    self.setMapError("\(MapSource.amap.title) SDK 已请求地图瓦片，但全部加载失败（\(self.failedTileCount) 个）。请检查网络与 Key 绑定的 iOS Bundle ID。")
+                } else if self.didInitializeMap && self.didStartLoadingMap {
                     self.setMapError("\(MapSource.amap.title) SDK \u{5DF2}\u{5F00}\u{59CB}\u{52A0}\u{8F7D}\u{4F46}\u{672A}\u{83B7}\u{5F97}\u{5730}\u{56FE}\u{6570}\u{636E}\u{3002}\u{8BF7}\u{68C0}\u{67E5}\u{7F51}\u{7EDC}\u{540E}\u{91CD}\u{8BD5}\u{3002}")
                 } else if self.didInitializeMap {
                     self.setMapError("\(MapSource.amap.title) SDK \u{5DF2}\u{521D}\u{59CB}\u{5316}\u{FF0C}\u{4F46}\u{672A}\u{5F00}\u{59CB}\u{52A0}\u{8F7D}\u{5730}\u{56FE}\u{3002}\u{8BF7}\u{68C0}\u{67E5} API Key \u{7684} iOS Bundle ID \u{914D}\u{7F6E}\u{548C}\u{7F51}\u{7EDC}\u{3002}")
