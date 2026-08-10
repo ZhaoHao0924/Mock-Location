@@ -80,6 +80,7 @@ struct LocationAMapSDKView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> AMapMapContainerView {
         let container = AMapMapContainerView(frame: .zero)
+        let resourceStatus = AMapMapViewFactory.resourceBundleStatus()
         guard let mapView = AMapMapViewFactory.mapView(withFrame: .zero) else {
             context.coordinator.setMapError("\(MapSource.amap.title) SDK \u{65E0}\u{6CD5}\u{521B}\u{5EFA}\u{5730}\u{56FE}\u{89C6}\u{56FE}\u{3002}")
             return container
@@ -93,7 +94,9 @@ struct LocationAMapSDKView: UIViewRepresentable {
         context.coordinator.apply(style: style, to: mapView)
         context.coordinator.updateSelection(on: mapView, centerOnSelection: true)
 
-        if !AMapSDKConfiguration.isConfigured {
+        if resourceStatus != 0 {
+            context.coordinator.setMapError("\(MapSource.amap.title) SDK \u{8D44}\u{6E90}\u{914D}\u{7F6E}\u{5931}\u{8D25}\u{FF08}\(resourceStatus)\u{FF09}\u{3002}")
+        } else if !AMapSDKConfiguration.isConfigured {
             context.coordinator.setMapError("\(MapSource.amap.title) SDK \u{672A}\u{914D}\u{7F6E} API Key\u{3002}")
         }
         return container

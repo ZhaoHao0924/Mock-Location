@@ -134,6 +134,24 @@ bundle_executable() {
 main_executable="$(bundle_executable "${app_path}" "main app")"
 extension_path="${app_path}/PlugIns/MockLocationShare.appex"
 extension_executable="$(bundle_executable "${extension_path}" "share extension")"
+amap_bundle_path=""
+for candidate in "${app_path}/AMap.bundle" "${app_path}/Frameworks/MAMapKit.framework/AMap.bundle"; do
+  if [[ -d "${candidate}" ]]; then
+    amap_bundle_path="${candidate}"
+    break
+  fi
+done
+
+test -n "${amap_bundle_path}" || {
+  echo "The AMap resource bundle is missing from the app bundle." >&2
+  exit 1
+}
+test -f "${amap_bundle_path}/res.ck" || {
+  echo "The AMap resource bundle is incomplete: ${amap_bundle_path}" >&2
+  exit 1
+}
+echo "::notice title=AMap resources::Using ${amap_bundle_path}"
+
 sign_bundle() {
   local bundle_path="$1"
   local entitlements_path="$2"

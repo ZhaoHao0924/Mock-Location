@@ -1,7 +1,27 @@
 #import "AMapMapViewFactory.h"
 #import <MAMapKit/MAMapView.h>
+#import <MAMapKit/MAMapView+Resource.h>
 
 @implementation AMapMapViewFactory
+
++ (NSInteger)resourceBundleStatus {
+    static dispatch_once_t onceToken;
+    static NSInteger status = 2;
+    dispatch_once(&onceToken, ^{
+        NSString *bundlePath = [[NSBundle mainBundle] pathForResource:@"AMap" ofType:@"bundle"];
+        if (bundlePath.length == 0) {
+            NSBundle *mapKitBundle = [NSBundle bundleForClass:[MAMapView class]];
+            NSString *candidate = [mapKitBundle.resourcePath stringByAppendingPathComponent:@"AMap.bundle"];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:candidate]) {
+                bundlePath = candidate;
+            }
+        }
+        if (bundlePath.length > 0) {
+            status = [MAMapView setBundlePath:bundlePath];
+        }
+    });
+    return status;
+}
 
 + (MAMapView * _Nullable)mapViewWithFrame:(CGRect)frame {
     if (CGRectIsEmpty(frame) || CGRectGetWidth(frame) < 1.0 || CGRectGetHeight(frame) < 1.0) {
@@ -10,6 +30,10 @@
     if (CGRectIsEmpty(frame)) {
         frame = CGRectMake(0.0, 0.0, 1.0, 1.0);
     }
+
+    AMapServices *services = [AMapServices sharedServices];
+    services.regionLanguageType = AMapRegionLanguageTypeZhHans;
+    [self resourceBundleStatus];
 
     // AMap 8+ requires privacy status before the first map view is created.
     [MAMapView updatePrivacyShow:AMapPrivacyShowStatusDidShow

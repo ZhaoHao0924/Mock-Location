@@ -4,6 +4,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface AMapMapViewFactory : NSObject
++ (NSInteger)resourceBundleStatus;
 + (MAMapView * _Nullable)mapViewWithFrame:(CGRect)frame;
 @end
 
