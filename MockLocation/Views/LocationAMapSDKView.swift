@@ -42,6 +42,26 @@ enum AMapMapStyle: CaseIterable, Hashable, Identifiable {
     }
 }
 
+final class AMapMapContainerView: UIView {
+    private(set) var mapView: MAMapView?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        clipsToBounds = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    func attach(_ mapView: MAMapView) {
+        self.mapView = mapView
+        mapView.frame = bounds
+        mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(mapView)
+    }
+}
+
 struct LocationAMapSDKView: UIViewRepresentable {
     let style: AMapMapStyle
     @Binding var coordinate: GeoCoordinate
@@ -50,8 +70,14 @@ struct LocationAMapSDKView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
-    func makeUIView(context: Context) -> MAMapView {
-        let mapView = MAMapView(frame: .zero)
+    func makeUIView(context: Context) -> AMapMapContainerView {
+        let container = AMapMapContainerView(frame: .zero)
+        guard let mapView = AMapMapViewFactory.mapView(withFrame: .zero) else {
+            context.coordinator.setMapError("\(MapSource.amap.title) SDK \u{65E0}\u{6CD5}\u{521B}\u{5EFA}\u{5730}\u{56FE}\u{89C6}\u{56FE}\u{3002}")
+            return container
+        }
+
+        container.attach(mapView)
         mapView.delegate = context.coordinator
         mapView.showsCompass = false
         mapView.showsScale = false
@@ -62,11 +88,15 @@ struct LocationAMapSDKView: UIViewRepresentable {
         if !AMapSDKConfiguration.isConfigured {
             context.coordinator.setMapError("\(MapSource.amap.title) SDK \u{672A}\u{914D}\u{7F6E} API Key\u{3002}")
         }
-        return mapView
+        return container
     }
 
-    func updateUIView(_ mapView: MAMapView, context: Context) {
+    func updateUIView(_ container: AMapMapContainerView, context: Context) {
         context.coordinator.parent = self
+        guard let mapView = container.mapView else {
+            context.coordinator.setMapError("\(MapSource.amap.title) SDK \u{65E0}\u{6CD5}\u{521B}\u{5EFA}\u{5730}\u{56FE}\u{89C6}\u{56FE}\u{3002}")
+            return
+        }
         context.coordinator.apply(style: style, to: mapView)
         context.coordinator.updateSelection(on: mapView, centerOnSelection: false)
     }

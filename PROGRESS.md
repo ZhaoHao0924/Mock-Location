@@ -1,6 +1,6 @@
 # Development Progress
 
-Last updated: 2026-08-09 (Asia/Shanghai)
+Last updated: 2026-08-10 (Asia/Shanghai)
 
 ## Completed
 
@@ -36,11 +36,44 @@ the unsigned device build, IPA layout validation, and artifact upload all
 passed. The `MockLocation-TrollStore-IPA` artifact (ID `9033025525`) is
 available for 30 days.
 
+## Current debugging status
+
+The latest on-device installation reaches the AMap SDK, but the app crashes
+while opening on iOS 15.6.1 with TrollStore 2.1.1. Four `MockLocation-*.ips`
+reports in `C:\Users\Administrator\Desktop\file` show the same failure:
+
+- `EXC_CRASH` / `SIGABRT` on the main thread.
+- The stack ends in Swift `fatalError` / `swift_dynamicCast` while SwiftUI
+  creates the UIKit map view (`PlatformViewHost`).
+- The AMap network thread starts, so the failure is not caused by a missing
+  framework or an invalid AMap key.
+- The current working hypothesis is that `MAMapView(frame: .zero)` can return
+  `nil` on this device/SDK combination, and Swift's imported non-optional type
+  bridge aborts before the view can be displayed.
+
+## Crash fix implementation
+
+The AMap startup crash fix is implemented locally and is ready for CI:
+
+- `MockLocation/MockLocation-Bridging-Header.h` imports the Objective-C map
+  view factory.
+- `MockLocation/Services/AMapMapViewFactory.h` and `.m` expose nullable
+  `MAMapView` creation without Swift's non-optional initializer bridge.
+- `MockLocation/Views/LocationAMapSDKView.swift` now hosts the optional map
+  view in an `AMapMapContainerView` and reports creation failure in the UI.
+
+## Validation status
+
+- `git diff --check` passes.
+- The XcodeGen `MockLocation` source root recursively contains both factory
+  files, so they will be included in the generated target.
+
 ## Next session
 
-1. Download `MockLocation.ipa` from the successful Actions artifact.
-2. Install it with TrollStore on a compatible device.
-3. Validate point and route simulation behavior on-device.
+1. Commit and push the crash fix, then wait for GitHub Actions to generate a
+   new TrollStore IPA.
+2. Delete the old app before installing the new IPA, then verify that the app
+   opens and that AMap tiles load on the iOS 15.6.1 test device.
 
 Local development cannot run the iOS build because this workstation is Windows
 and has no Xcode, `xcodebuild`, or XcodeGen toolchain.
