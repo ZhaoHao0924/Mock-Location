@@ -5,6 +5,10 @@ struct MockLocationApp: App {
     @StateObject private var repository = LocationRepository()
     @StateObject private var simulation = LocationSimulationService()
 
+    init() {
+        AMapSDKConfiguration.configure()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootTabView()

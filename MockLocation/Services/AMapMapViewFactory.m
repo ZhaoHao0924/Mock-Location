@@ -1,24 +1,61 @@
 #import "AMapMapViewFactory.h"
 #import <MAMapKit/MAMapView.h>
 #import <MAMapKit/MAMapView+Resource.h>
+#import <MAMapKit/MAMapVersion.h>
+
+static NSString * _Nullable AMapResourceBundlePath(void) {
+    NSString *bundlePath = [[NSBundle mainBundle] pathForResource:@"AMap" ofType:@"bundle"];
+    if (bundlePath.length == 0) {
+        NSBundle *mapKitBundle = [NSBundle bundleForClass:[MAMapView class]];
+        NSString *candidate = [mapKitBundle.resourcePath stringByAppendingPathComponent:@"AMap.bundle"];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:candidate]) {
+            bundlePath = candidate;
+        }
+    }
+    return bundlePath;
+}
 
 @implementation AMapMapViewFactory
+
++ (NSString * _Nullable)resourceBundleVersion {
+    NSString *bundlePath = AMapResourceBundlePath();
+    if (bundlePath.length == 0) {
+        return nil;
+    }
+
+    NSString *versionPath = [bundlePath stringByAppendingPathComponent:@"bundleVersion.txt"];
+    NSString *version = [NSString stringWithContentsOfFile:versionPath
+                                                   encoding:NSUTF8StringEncoding
+                                                      error:nil];
+    return [version stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
 
 + (NSInteger)resourceBundleStatus {
     static dispatch_once_t onceToken;
     static NSInteger status = 2;
     dispatch_once(&onceToken, ^{
-        NSString *bundlePath = [[NSBundle mainBundle] pathForResource:@"AMap" ofType:@"bundle"];
+        NSString *bundlePath = AMapResourceBundlePath();
         if (bundlePath.length == 0) {
-            NSBundle *mapKitBundle = [NSBundle bundleForClass:[MAMapView class]];
-            NSString *candidate = [mapKitBundle.resourcePath stringByAppendingPathComponent:@"AMap.bundle"];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:candidate]) {
-                bundlePath = candidate;
-            }
+            return;
         }
-        if (bundlePath.length > 0) {
-            status = [MAMapView setBundlePath:bundlePath];
+
+        NSFileManager *fileManager = [NSFileManager defaultManager];
+        NSString *resourceIndexPath = [bundlePath stringByAppendingPathComponent:@"res.ck"];
+        NSString *resourceArchivePath = [bundlePath stringByAppendingPathComponent:@"res.zip"];
+        NSString *threeDBundlePath = [bundlePath stringByAppendingPathComponent:@"AMap3D.bundle"];
+        if (![fileManager fileExistsAtPath:resourceIndexPath] ||
+            ![fileManager fileExistsAtPath:resourceArchivePath] ||
+            ![fileManager fileExistsAtPath:threeDBundlePath]) {
+            return;
         }
+
+        NSString *bundleVersion = [self resourceBundleVersion];
+        NSString *sdkVersion = [[MAMapKitVersion componentsSeparatedByString:@"+"] firstObject];
+        if (bundleVersion.length == 0 || ![bundleVersion isEqualToString:sdkVersion]) {
+            status = 1;
+            return;
+        }
+        status = [MAMapView setBundlePath:bundlePath];
     });
     return status;
 }

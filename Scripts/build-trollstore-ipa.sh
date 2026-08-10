@@ -4,6 +4,7 @@ set -euo pipefail
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_root="${project_root}/.build/trollstore"
 ipa_path="${project_root}/MockLocation.ipa"
+amap_sdk_version="11.2.100"
 
 command -v xcodegen >/dev/null 2>&1 || {
   echo "xcodegen is required. Install it with: brew install xcodegen" >&2
@@ -134,23 +135,41 @@ bundle_executable() {
 main_executable="$(bundle_executable "${app_path}" "main app")"
 extension_path="${app_path}/PlugIns/MockLocationShare.appex"
 extension_executable="$(bundle_executable "${extension_path}" "share extension")"
-amap_bundle_path=""
-for candidate in "${app_path}/AMap.bundle" "${app_path}/Frameworks/MAMapKit.framework/AMap.bundle"; do
-  if [[ -d "${candidate}" ]]; then
-    amap_bundle_path="${candidate}"
-    break
-  fi
-done
+amap_bundle_path="${app_path}/AMap.bundle"
 
-test -n "${amap_bundle_path}" || {
-  echo "The AMap resource bundle is missing from the app bundle." >&2
+test -d "${amap_bundle_path}" || {
+  echo "The 3D AMap resource bundle is missing from the app bundle." >&2
   exit 1
 }
 test -f "${amap_bundle_path}/res.ck" || {
-  echo "The AMap resource bundle is incomplete: ${amap_bundle_path}" >&2
+  echo "The AMap resource bundle has no res.ck: ${amap_bundle_path}" >&2
   exit 1
 }
-echo "::notice title=AMap resources::Using ${amap_bundle_path}"
+test -f "${amap_bundle_path}/res.zip" || {
+  echo "The AMap resource bundle has no res.zip: ${amap_bundle_path}" >&2
+  exit 1
+}
+test -f "${amap_bundle_path}/bundleVersion.txt" || {
+  echo "The AMap resource bundle has no version marker: ${amap_bundle_path}" >&2
+  exit 1
+}
+test -d "${amap_bundle_path}/AMap3D.bundle" || {
+  echo "The AMap resource bundle is not the 3D map bundle: ${amap_bundle_path}" >&2
+  exit 1
+}
+
+amap_bundle_version="$(tr -d '[:space:]' < "${amap_bundle_path}/bundleVersion.txt")"
+if [[ "${amap_bundle_version}" != "${amap_sdk_version}" ]]; then
+  echo "AMap resource version ${amap_bundle_version} does not match SDK ${amap_sdk_version}." >&2
+  exit 1
+fi
+
+standard_style_path="$(find "${amap_bundle_path}/AMap3D.bundle" -maxdepth 1 -type f -name 'style_X_MainStd_Std_D_s_*.data' -print -quit)"
+test -n "${standard_style_path}" || {
+  echo "The AMap 3D bundle has no standard base-map style data." >&2
+  exit 1
+}
+echo "::notice title=AMap resources::Using ${amap_bundle_path} (${amap_bundle_version})"
 
 sign_bundle() {
   local bundle_path="$1"
