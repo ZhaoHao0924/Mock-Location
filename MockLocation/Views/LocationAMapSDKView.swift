@@ -141,8 +141,15 @@ struct LocationAMapSDKView: UIViewRepresentable {
     final class Coordinator: NSObject, MAMapViewDelegate {
         var parent: LocationAMapSDKView
 
+        private static let mapSelectionTitle = "地图选点"
+        private static let pinReuseIdentifier = "MockLocationSelectionPin"
+
         private var annotation: MAPointAnnotation?
         private var displayedCoordinate: GeoCoordinate?
+        /// The coordinate this map itself just published. While it is pending,
+        /// the SwiftUI round-trip must not recenter: tapping near an edge would
+        /// otherwise yank the view out from under the finger that just tapped.
+        private var mapOriginCoordinate: GeoCoordinate?
         private weak var registeredMapView: MAMapView?
         private var mapIsReadyForDisplay = false
         private var didInitializeMap = false
@@ -204,6 +211,13 @@ struct LocationAMapSDKView: UIViewRepresentable {
             }
 
             let selectionChanged = displayedCoordinate != parent.coordinate
+            // Selections made on the map keep the camera where the user left it.
+            // Selections arriving from search, favorites, coordinate entry or a
+            // share still recenter, because their target may be off screen.
+            let cameFromMap = mapOriginCoordinate == parent.coordinate
+            if cameFromMap {
+                mapOriginCoordinate = nil
+            }
             let mapCoordinate = ChinaCoordinateConverter.wgs84ToGCJ02(parent.coordinate.clCoordinate)
             let marker = annotation ?? MAPointAnnotation()
             marker.coordinate = mapCoordinate
@@ -214,7 +228,7 @@ struct LocationAMapSDKView: UIViewRepresentable {
                 mapView.addAnnotation(marker)
             }
 
-            if centerOnSelection || selectionChanged {
+            if centerOnSelection || (selectionChanged && !cameFromMap) {
                 mapView.centerCoordinate = mapCoordinate
             }
             displayedCoordinate = parent.coordinate
@@ -260,15 +274,57 @@ struct LocationAMapSDKView: UIViewRepresentable {
             setMapError("\(MapSource.amap.title) SDK \u{7684} iOS \u{56FE}\u{5F62}\u{6E32}\u{67D3}\u{5DF2}\u{88AB}\u{7981}\u{7528}\u{3002}\u{8BF7}\u{91CD}\u{542F}\u{8BBE}\u{5907}\u{540E}\u{91CD}\u{8BD5}\u{3002}")
         }
 
-        func mapView(_ mapView: MAMapView!, didLongPressedAt coordinate: CLLocationCoordinate2D) {
-            let wgs84Coordinate = ChinaCoordinateConverter.gcj02ToWGS84(coordinate)
+        /// Single delivery point for every selection made on the map itself.
+        /// Marking `mapOriginCoordinate` is what stops `updateSelection` from
+        /// recentering on the way back through SwiftUI.
+        private func publishFromMap(_ gcj02Coordinate: CLLocationCoordinate2D) {
+            let wgs84Coordinate = ChinaCoordinateConverter.gcj02ToWGS84(gcj02Coordinate)
             guard CLLocationCoordinate2DIsValid(wgs84Coordinate) else { return }
 
-            parent.coordinate = GeoCoordinate(
+            let published = GeoCoordinate(
                 latitude: wgs84Coordinate.latitude,
                 longitude: wgs84Coordinate.longitude
             )
-            parent.title = "\u{5730}\u{56FE}\u{9009}\u{70B9}"
+            mapOriginCoordinate = published
+            parent.coordinate = published
+            parent.title = Self.mapSelectionTitle
+        }
+
+        func mapView(_ mapView: MAMapView!, didSingleTappedAt coordinate: CLLocationCoordinate2D) {
+            publishFromMap(coordinate)
+        }
+
+        func mapView(_ mapView: MAMapView!, didLongPressedAt coordinate: CLLocationCoordinate2D) {
+            publishFromMap(coordinate)
+        }
+
+        func mapView(_ mapView: MAMapView!, viewFor annotation: MAAnnotation!) -> MAAnnotationView! {
+            guard annotation is MAPointAnnotation else { return nil }
+
+            let identifier = Self.pinReuseIdentifier
+            let pin: MAPinAnnotationView
+            if let reused = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                as? MAPinAnnotationView {
+                pin = reused
+            } else {
+                pin = MAPinAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            }
+            pin.annotation = annotation
+            pin.canShowCallout = false
+            pin.isDraggable = true
+            pin.pinColor = .red
+            return pin
+        }
+
+        func mapView(
+            _ mapView: MAMapView!,
+            annotationView view: MAAnnotationView!,
+            didChange newState: MAAnnotationViewDragState,
+            fromOldState oldState: MAAnnotationViewDragState
+        ) {
+            // Publish only once the drag settles, not on every intermediate frame.
+            guard newState == .ending, let dragged = view.annotation else { return }
+            publishFromMap(dragged.coordinate)
         }
 
         func setMapError(_ message: String?) {
