@@ -209,6 +209,21 @@ user-key configuration fixes are implemented and passed CI:
   iOS compilation cannot run because this workstation is Windows and has no
   Xcode, `xcodebuild`, or XcodeGen toolchain.
 
+## Simulation start had no effect
+
+`PrivateLocationBridge.simulationManager` allocated a fresh `CLSimulationManager`
+on every call. That broke simulation twice over: `startWithLocations:` and
+`stopWithError:` addressed different objects, and the manager allocated inside
+`startWithLocations:` was released the moment that method returned, so locationd
+lost its simulation client immediately after being told to start.
+
+Nothing surfaced in the UI because every `objc_msgSend` succeeded, so the bridge
+returned YES and the service moved to `.active`. The indicator read 定位中 while
+the system location never changed.
+
+The manager is now a `dispatch_once` process-lifetime singleton, so start and
+stop address the same live client.
+
 ## Next session
 
 1. Push the raster-default change so GitHub Actions can compile it. Local

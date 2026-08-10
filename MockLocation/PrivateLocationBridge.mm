@@ -37,8 +37,21 @@ static BOOL MockHasEntitlement(CFStringRef entitlement) {
 @implementation PrivateLocationBridge
 
 + (id)simulationManager {
-    Class managerClass = NSClassFromString(@"CLSimulationManager");
-    return managerClass != Nil ? [[managerClass alloc] init] : nil;
+    // One manager for the process lifetime. This previously returned a fresh
+    // instance per call, which broke simulation two ways: start and stop
+    // addressed different objects, and the manager created inside
+    // startWithLocations: was released the moment that method returned, so
+    // locationd lost its simulation client immediately after being told to
+    // start. A static strong reference keeps the client alive.
+    static id sharedManager = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        Class managerClass = NSClassFromString(@"CLSimulationManager");
+        if (managerClass != Nil) {
+            sharedManager = [[managerClass alloc] init];
+        }
+    });
+    return sharedManager;
 }
 
 + (NSArray<NSString *> *)requiredSelectors {
