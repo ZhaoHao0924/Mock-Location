@@ -17,8 +17,35 @@ enum MapSource: Hashable {
     }
 }
 
+extension AMapMapStyle {
+    /// 高德 `appmaptile` style code for the key-free raster pipeline.
+    var amapRasterTileStyle: String {
+        switch self {
+        case .standard:
+            return "8"
+        case .satellite, .hybrid:
+            return "6"
+        }
+    }
+
+    /// Host family that serves `amapRasterTileStyle`.
+    var amapRasterTileHostPrefix: String {
+        switch self {
+        case .standard:
+            return "webrd"
+        case .satellite, .hybrid:
+            return "webst"
+        }
+    }
+
+    /// Styles the raster pipeline can draw with a single tile layer. 混合 needs
+    /// a second overlay layer, so it stays exclusive to the native SDK.
+    static var rasterRenderable: [AMapMapStyle] { [.standard, .satellite] }
+}
+
 struct LocationMapProviderView: UIViewRepresentable {
     let source: MapSource
+    var style: AMapMapStyle = .standard
     @Binding var coordinate: GeoCoordinate
     @Binding var title: String
     @Binding var mapError: String?
@@ -26,7 +53,7 @@ struct LocationMapProviderView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     func makeUIView(context: Context) -> MapTileContainer {
-        let container = MapTileContainer(source: source)
+        let container = MapTileContainer(source: source, style: style)
         let coordinator = context.coordinator
         container.onLayoutChange = { [weak coordinator] view in
             coordinator?.render(in: view, force: true)
@@ -142,6 +169,7 @@ final class MapTileContainer: UIView {
     var onLoadFailure: ((Error) -> Void)?
 
     private let source: MapSource
+    private let style: AMapMapStyle
     private let tileLayer = UIView()
     private let pinView = UIView()
     private let activityIndicator = UIActivityIndicatorView(style: .large)
@@ -168,8 +196,9 @@ final class MapTileContainer: UIView {
     private var loadedTileCount = 0
     private var firstError: Error?
 
-    init(source: MapSource, frame: CGRect = .zero) {
+    init(source: MapSource, style: AMapMapStyle = .standard, frame: CGRect = .zero) {
         self.source = source
+        self.style = style
         super.init(frame: frame)
         backgroundColor = .systemGray6
         clipsToBounds = true
@@ -291,7 +320,7 @@ final class MapTileContainer: UIView {
                 tileViews[key] = MapTileView(imageView: imageView, rawX: rawX, rawY: rawY)
                 pendingTiles.insert(key)
 
-                if let image = imageCache.object(forKey: key.cacheKey) {
+                if let image = imageCache.object(forKey: cacheKey(for: key)) {
                     imageView.image = image
                     pendingTiles.remove(key)
                     loadedTileCount += 1
@@ -305,8 +334,13 @@ final class MapTileContainer: UIView {
         finishLoadingIfNeeded()
     }
 
+    /// Tiles differ per style, so the style has to take part in cache identity.
+    private func cacheKey(for key: MapTileKey) -> NSString {
+        "\(style.amapRasterTileStyle)/\(key.cacheKey)" as NSString
+    }
+
     private func requestTile(_ key: MapTileKey, generation: Int) {
-        guard let url = source.tileURL(for: key) else {
+        guard let url = source.tileURL(for: key, style: style) else {
             completeTile(key, generation: generation, image: nil, error: MapTileError.invalidURL)
             return
         }
@@ -345,7 +379,7 @@ final class MapTileContainer: UIView {
         pendingTiles.remove(key)
 
         if let image {
-            imageCache.setObject(image, forKey: key.cacheKey)
+            imageCache.setObject(image, forKey: cacheKey(for: key))
             tileViews[key]?.imageView.image = image
             loadedTileCount += 1
         } else if let error, firstError == nil {
@@ -450,19 +484,22 @@ private extension MapSource {
         }
     }
 
-    func tileURL(for key: MapTileKey) -> URL? {
+    func tileURL(for key: MapTileKey, style: AMapMapStyle) -> URL? {
         switch self {
         case .amap:
+            // These `appmaptile` endpoints need no API Key. The style code and
+            // the host family must agree: webrd serves the vector-rendered
+            // base map, webst serves satellite imagery.
             let hostIndex = (key.x + key.y) % 4 + 1
             var components = URLComponents()
             components.scheme = "https"
-            components.host = "webrd0\(hostIndex).is.autonavi.com"
+            components.host = "\(style.amapRasterTileHostPrefix)0\(hostIndex).is.autonavi.com"
             components.path = "/appmaptile"
             components.queryItems = [
                 URLQueryItem(name: "lang", value: "zh_cn"),
                 URLQueryItem(name: "size", value: "1"),
                 URLQueryItem(name: "scale", value: "2"),
-                URLQueryItem(name: "style", value: "8"),
+                URLQueryItem(name: "style", value: style.amapRasterTileStyle),
                 URLQueryItem(name: "x", value: String(key.x)),
                 URLQueryItem(name: "y", value: String(key.y)),
                 URLQueryItem(name: "z", value: String(key.zoom))

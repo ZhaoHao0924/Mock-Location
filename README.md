@@ -37,11 +37,17 @@ TrollStore applies its own installation signature. The development target is
 iOS 15. The private bridge checks for the required runtime selectors before it
 changes any location state, so unsupported OS versions fail closed.
 
-## AMap key
+## Map rendering
 
-The native AMap view requires an iOS API Key registered for the app Bundle ID
-`com.personal.mocklocation`. After installation, enter your own key under
-Settings > 高德地图. A Web Service Key cannot load the native iOS map.
+Both the 高德 and 百度 tabs render through a built-in raster tile view that
+needs no API Key. This is the default and is unaffected by SDK authentication,
+private entitlements, or the 3D resource bundle.
+
+The native AMap 3D SDK is opt-in under Settings > 高德地图 > 使用高德原生 SDK.
+It requires an API Key whose platform is iOS and whose bound Bundle ID is
+exactly `com.personal.mocklocation`. A Web Service Key, or a Key bound to a
+different Bundle ID, fails authentication; the SDK then issues no tile requests
+at all and the base map stays blank while the 高德 logo still draws.
 
 ## Project layout
 

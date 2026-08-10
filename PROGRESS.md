@@ -46,7 +46,58 @@ The final IPA was unpacked independently. It contains `AMap.bundle` with
 `bundleVersion.txt = 11.2.100`, `res.ck`, `res.zip`, `AMap3D.bundle`, and a
 standard base-map style resource.
 
-## Current debugging status
+## Blank base map: diagnosis and fix
+
+Device testing returned the banner "SDK 已完成初始化，但没有收到任何底图瓦片"
+with Bundle ID `com.personal.mocklocation`, a 32-character Key ending `e9af`
+reported as applied, and 3D resource 11.2.100.
+
+That banner is one specific watchdog branch. Reaching it requires
+`didFinishLoadingMap == true`, `successfulTileCount == 0` **and**
+`failedTileCount == 0`. So the engine completed its load cycle and the
+`tileLoadCallback` never fired even once — not a single tile request was
+issued, let alone failed. That rules out the network path (failed requests
+would increment `failedTileCount`), the renderer (`didChangeOpenGLESDisabled`
+never fired and `mapViewDidFinishLoadingMap` did), the 3D resources
+(`prepareSDK()` returned 0 and the version matched), and layout (the 高德 logo
+draws in a non-empty frame).
+
+Key authentication was the first hypothesis. The 高德 console screenshots
+disprove it: the Key ending `e9af` matches what the app reports, its 服务平台
+is iOS平台, iOS地图SDK is among the enabled services, and 安全码Bundle ID is
+`com.personal.mocklocation`. 安全密钥 showing `—` is expected on iOS, where the
+Bundle ID is the binding.
+
+Three candidates remain. All three produce this same signature — engine
+initialized, zero tile requests attempted, logo drawn:
+
+1. The 3D resource path was never actually applied. `setBundlePath:` had its
+   return value treated as `0 == success`, which the SDK headers do not
+   document. If 0 means failure there, the `resourceStatus == 0` guard in
+   `LocationAMapSDKView` was passing precisely when the path had not been set.
+2. Metal device creation fails under the ad-hoc TrollStore signature. The 高德
+   logo is a UIKit subview, so it draws regardless of renderer state.
+3. The authentication request never completes — a transport-level problem
+   distinct from tile fetching, which is why no tile request is ever attempted.
+
+`AMapSDKConfiguration.isApplied` is misleading independent of all this: it only
+compares `AMapServices.shared().apiKey` against the stored string, proving a
+local property assignment and nothing about the server's answer. Its label now
+reads 已写入 SDK.
+
+The fix routes 高德 to the key-free raster tile pipeline by default. That code
+already existed in `LocationMapProviderView` (`MapSource.amap` projections,
+`webrd`/`webst` `appmaptile` URLs, `AMapWebMercator`) but was unreachable
+because the dashboard hardcoded `source: .baidu`. The native SDK is retained as
+an explicit opt-in.
+
+`AMapMapViewFactory.resourceBundleStatus` no longer gates on the undocumented
+`setBundlePath:` return value. It still validates bundle contents and the
+version against `MAMapKitVersion`, but it now only overrides the SDK's own
+lookup when `AMap.bundle` is missing from the main bundle, and ignores the
+return value. This removes candidate 1 above as a silent failure mode.
+
+## Previous debugging status
 
 The nullable factory prevents the startup crash on iOS 15.6.1 with TrollStore
 2.1.1. The map view now initializes the required privacy state, sets the AMap
@@ -101,14 +152,18 @@ user-key configuration fixes are implemented and passed CI:
 
 ## Next session
 
-1. Download artifact `9056743891` and install the generated IPA with TrollStore.
-2. Fully terminate and reopen the app after installation. In Settings > 高德地图,
-   enter an iOS platform SDK Key bound to `com.personal.mocklocation`.
-3. Open the map and check that the diagnostic shows `Key ... 已应用` and
-   `3D 资源 11.2.100`.
-4. If the base map is still blank, capture that diagnostic banner (without
-   sharing the full Key) so the remaining network/authentication issue can be
-   distinguished from a resource problem.
+1. Push the raster-default change so GitHub Actions can compile it. Local
+   compilation is still impossible on this Windows workstation.
+2. Install the resulting IPA and open the 地图 tab. 高德 should now render
+   without any Key, with 标准 and 卫星 both selectable.
+3. If that raster map renders, the blank-base-map issue is resolved for normal
+   use and the native SDK path is optional.
+4. The Key is confirmed correct, so pursuing the native SDK further needs device
+   evidence rather than more code guesses. Enable Settings > 高德地图 >
+   使用高德原生 SDK, reproduce the blank map, and capture the device console
+   (TrollStore permits a console reader). 高德 logs its authentication result and
+   resource-load errors to stderr; that output separates candidate 2 (Metal)
+   from candidate 3 (transport) directly.
 
 Local development cannot run the iOS build because this workstation is Windows
 and has no Xcode, `xcodebuild`, or XcodeGen toolchain.

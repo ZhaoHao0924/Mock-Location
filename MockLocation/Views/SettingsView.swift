@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject private var simulation: LocationSimulationService
     @State private var showingResetConfirmation = false
     @State private var amapAPIKey = AMapSDKConfiguration.storedAPIKey
+    @AppStorage(AMapSDKConfiguration.useNativeSDKDefaultsKey) private var preferNativeAMapSDK = false
     @State private var amapKeySaveNotice: AMapKeySaveNotice?
 
     var body: some View {
@@ -60,35 +61,48 @@ struct SettingsView: View {
     }
 
     private var amapKeySection: some View {
-        Section("高德地图") {
-            SecureField("iOS Key", text: $amapAPIKey)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .textContentType(.password)
-
-            HStack(alignment: .firstTextBaseline) {
-                Text("Bundle ID")
-                Spacer()
-                Text(Bundle.main.bundleIdentifier ?? "com.personal.mocklocation")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.trailing)
+        Section {
+            Toggle(isOn: $preferNativeAMapSDK) {
+                Text("使用高德原生 SDK")
             }
 
-            Button {
-                saveAMapAPIKey()
-            } label: {
-                Label("保存 Key", systemImage: "checkmark")
-            }
+            if preferNativeAMapSDK {
+                SecureField("iOS Key", text: $amapAPIKey)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textContentType(.password)
 
-            if AMapSDKConfiguration.isConfigured {
-                Button(role: .destructive) {
-                    amapAPIKey = ""
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Bundle ID")
+                    Spacer()
+                    Text(Bundle.main.bundleIdentifier ?? "com.personal.mocklocation")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                Button {
                     saveAMapAPIKey()
                 } label: {
-                    Label("清除 Key", systemImage: "trash")
+                    Label("保存 Key", systemImage: "checkmark")
+                }
+
+                if AMapSDKConfiguration.isConfigured {
+                    Button(role: .destructive) {
+                        amapAPIKey = ""
+                        saveAMapAPIKey()
+                    } label: {
+                        Label("清除 Key", systemImage: "trash")
+                    }
                 }
             }
+        } header: {
+            Text("高德地图")
+        } footer: {
+            Text(preferNativeAMapSDK
+                 ? "原生 SDK 要求 Key 的平台为「iOS」且绑定的 Bundle ID 与上面完全一致。平台或 Bundle ID 不匹配时，高德会拒绝鉴权，SDK 不会发出任何瓦片请求，底图保持空白。"
+                 : "当前使用免 Key 栅格底图，直接取高德公开瓦片服务，不需要 API Key，也不受鉴权与私有权限影响。")
+                .font(.footnote)
         }
     }
 

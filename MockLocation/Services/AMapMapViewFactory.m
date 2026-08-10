@@ -55,7 +55,20 @@ static NSString * _Nullable AMapResourceBundlePath(void) {
             status = 1;
             return;
         }
-        status = [MAMapView setBundlePath:bundlePath];
+        // Only override the SDK's own lookup when AMap.bundle is absent from the
+        // main bundle, which is where the SDK already searches by default under
+        // a standard CocoaPods integration.
+        //
+        // The return value of setBundlePath: is deliberately ignored. Its
+        // success encoding is not documented in the SDK headers, so the previous
+        // `status = [MAMapView setBundlePath:...]` gated map creation on a guess
+        // that 0 means success. If 0 actually means failure there, the guard in
+        // LocationAMapSDKView was passing precisely when the resource path had
+        // not been applied.
+        if ([[NSBundle mainBundle] pathForResource:@"AMap" ofType:@"bundle"].length == 0) {
+            [MAMapView setBundlePath:bundlePath];
+        }
+        status = 0;
     });
     return status;
 }
