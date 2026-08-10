@@ -164,7 +164,13 @@ if [[ "${amap_bundle_version}" != "${amap_sdk_version}" ]]; then
   exit 1
 fi
 
-standard_style_path="$(find "${amap_bundle_path}/AMap3D.bundle" -maxdepth 1 -type f -name 'style_X_MainStd_Std_D_s_*.data' -print -quit)"
+standard_style_path=""
+for candidate in "${amap_bundle_path}/AMap3D.bundle"/style_X_MainStd_Std_D_s_*.data; do
+  if [[ -f "${candidate}" ]]; then
+    standard_style_path="${candidate}"
+    break
+  fi
+done
 test -n "${standard_style_path}" || {
   echo "The AMap 3D bundle has no standard base-map style data." >&2
   exit 1
