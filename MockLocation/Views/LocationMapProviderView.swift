@@ -17,35 +17,9 @@ enum MapSource: Hashable {
     }
 }
 
-extension AMapMapStyle {
-    /// 高德 `appmaptile` style code for the key-free raster pipeline.
-    var amapRasterTileStyle: String {
-        switch self {
-        case .standard:
-            return "8"
-        case .satellite, .hybrid:
-            return "6"
-        }
-    }
-
-    /// Host family that serves `amapRasterTileStyle`.
-    var amapRasterTileHostPrefix: String {
-        switch self {
-        case .standard:
-            return "webrd"
-        case .satellite, .hybrid:
-            return "webst"
-        }
-    }
-
-    /// Styles the raster pipeline can draw with a single tile layer. 混合 needs
-    /// a second overlay layer, so it stays exclusive to the native SDK.
-    static var rasterRenderable: [AMapMapStyle] { [.standard, .satellite] }
-}
-
+/// 百度 raster tile view. 高德 renders exclusively through its native 3D SDK,
+/// so this pipeline is Baidu-only.
 struct LocationMapProviderView: UIViewRepresentable {
-    let source: MapSource
-    var style: AMapMapStyle = .standard
     @Binding var coordinate: GeoCoordinate
     @Binding var title: String
     @Binding var mapError: String?
@@ -53,7 +27,7 @@ struct LocationMapProviderView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     func makeUIView(context: Context) -> MapTileContainer {
-        let container = MapTileContainer(source: source, style: style)
+        let container = MapTileContainer(frame: .zero)
         let coordinator = context.coordinator
         container.onLayoutChange = { [weak coordinator] view in
             coordinator?.render(in: view, force: true)
@@ -63,7 +37,7 @@ struct LocationMapProviderView: UIViewRepresentable {
         }
         container.onLoadFailure = { [weak coordinator] error in
             guard let coordinator else { return }
-            coordinator.parent.mapError = Coordinator.errorMessage(for: coordinator.parent.source, error: error)
+            coordinator.parent.mapError = Coordinator.errorMessage(for: error)
         }
 
         let longPress = UILongPressGestureRecognizer(target: coordinator, action: #selector(Coordinator.handleLongPress(_:)))
@@ -91,7 +65,7 @@ struct LocationMapProviderView: UIViewRepresentable {
 
         init(parent: LocationMapProviderView) {
             self.parent = parent
-            zoomLevel = parent.source.initialZoom
+            zoomLevel = BaiduTileLayout.initialZoom
         }
 
         func render(in container: MapTileContainer, force: Bool = false) {
@@ -113,8 +87,8 @@ struct LocationMapProviderView: UIViewRepresentable {
                 parent.mapError = nil
             }
             container.setMap(
-                center: parent.source.worldPoint(forWGS84: mapCenter, zoom: zoomLevel),
-                selected: parent.source.worldPoint(forWGS84: selectedCoordinate, zoom: zoomLevel),
+                center: BaiduTileLayout.worldPoint(forWGS84: mapCenter, zoom: zoomLevel),
+                selected: BaiduTileLayout.worldPoint(forWGS84: selectedCoordinate, zoom: zoomLevel),
                 zoom: zoomLevel,
                 force: force || coordinateChanged
             )
@@ -123,7 +97,7 @@ struct LocationMapProviderView: UIViewRepresentable {
         @objc func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
             guard recognizer.state == .began, let container = recognizer.view as? MapTileContainer else { return }
             let point = recognizer.location(in: container)
-            let coordinate = parent.source.wgs84Coordinate(for: container.coordinateWorldPoint(at: point), zoom: zoomLevel)
+            let coordinate = BaiduTileLayout.wgs84Coordinate(for: container.coordinateWorldPoint(at: point), zoom: zoomLevel)
             guard CLLocationCoordinate2DIsValid(coordinate) else { return }
             parent.coordinate = GeoCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude)
             parent.title = "地图选点"
@@ -135,7 +109,7 @@ struct LocationMapProviderView: UIViewRepresentable {
             case .began, .changed:
                 container.setPanTranslation(recognizer.translation(in: container))
             case .ended:
-                mapCenter = parent.source.wgs84Coordinate(for: container.currentCenterWorldPoint(), zoom: zoomLevel)
+                mapCenter = BaiduTileLayout.wgs84Coordinate(for: container.currentCenterWorldPoint(), zoom: zoomLevel)
                 render(in: container, force: true)
             case .cancelled, .failed:
                 container.setPanTranslation(.zero)
@@ -147,18 +121,18 @@ struct LocationMapProviderView: UIViewRepresentable {
         @objc func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
             guard recognizer.state == .ended, let container = recognizer.view as? MapTileContainer else { return }
             if recognizer.scale >= 1.2 {
-                zoomLevel = min(parent.source.zoomRange.upperBound, zoomLevel + 1)
+                zoomLevel = min(BaiduTileLayout.zoomRange.upperBound, zoomLevel + 1)
             } else if recognizer.scale <= 0.8 {
-                zoomLevel = max(parent.source.zoomRange.lowerBound, zoomLevel - 1)
+                zoomLevel = max(BaiduTileLayout.zoomRange.lowerBound, zoomLevel - 1)
             } else {
                 return
             }
             render(in: container, force: true)
         }
 
-        static func errorMessage(for source: MapSource, error: Error) -> String {
+        static func errorMessage(for error: Error) -> String {
             let nsError = error as NSError
-            return "\(source.title)加载失败（\(nsError.domain) \(nsError.code)）：\(nsError.localizedDescription)"
+            return "\(MapSource.baidu.title)加载失败（\(nsError.domain) \(nsError.code)）：\(nsError.localizedDescription)"
         }
     }
 }
@@ -168,8 +142,6 @@ final class MapTileContainer: UIView {
     var onLoadSuccess: (() -> Void)?
     var onLoadFailure: ((Error) -> Void)?
 
-    private let source: MapSource
-    private let style: AMapMapStyle
     private let tileLayer = UIView()
     private let pinView = UIView()
     private let activityIndicator = UIActivityIndicatorView(style: .large)
@@ -196,9 +168,7 @@ final class MapTileContainer: UIView {
     private var loadedTileCount = 0
     private var firstError: Error?
 
-    init(source: MapSource, style: AMapMapStyle = .standard, frame: CGRect = .zero) {
-        self.source = source
-        self.style = style
+    override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .systemGray6
         clipsToBounds = true
@@ -216,7 +186,7 @@ final class MapTileContainer: UIView {
         activityIndicator.hidesWhenStopped = true
         addSubview(activityIndicator)
 
-        attributionLabel.text = source.title
+        attributionLabel.text = MapSource.baidu.title
         attributionLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         attributionLabel.textColor = .label
         attributionLabel.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.8)
@@ -302,7 +272,7 @@ final class MapTileContainer: UIView {
         var startTileY = Int(floor(topLeft.y / tileSize))
         var endTileY = Int(floor((topLeft.y + bounds.height - 1) / tileSize))
 
-        let yRange = source.rawTileYRange(zoom: zoomLevel)
+        let yRange = BaiduTileLayout.rawTileYRange(zoom: zoomLevel)
         startTileY = max(startTileY, yRange.lowerBound)
         endTileY = min(endTileY, yRange.upperBound)
 
@@ -313,14 +283,14 @@ final class MapTileContainer: UIView {
 
         for rawY in startTileY...endTileY {
             for rawX in startTileX...endTileX {
-                let key = source.tileKey(rawX: rawX, rawY: rawY, zoom: zoomLevel)
+                let key = BaiduTileLayout.tileKey(rawX: rawX, rawY: rawY, zoom: zoomLevel)
                 let imageView = UIImageView()
                 imageView.contentMode = .scaleToFill
                 tileLayer.addSubview(imageView)
                 tileViews[key] = MapTileView(imageView: imageView, rawX: rawX, rawY: rawY)
                 pendingTiles.insert(key)
 
-                if let image = imageCache.object(forKey: cacheKey(for: key)) {
+                if let image = imageCache.object(forKey: key.cacheKey) {
                     imageView.image = image
                     pendingTiles.remove(key)
                     loadedTileCount += 1
@@ -334,13 +304,8 @@ final class MapTileContainer: UIView {
         finishLoadingIfNeeded()
     }
 
-    /// Tiles differ per style, so the style has to take part in cache identity.
-    private func cacheKey(for key: MapTileKey) -> NSString {
-        "\(style.amapRasterTileStyle)/\(key.cacheKey)" as NSString
-    }
-
     private func requestTile(_ key: MapTileKey, generation: Int) {
-        guard let url = source.tileURL(for: key, style: style) else {
+        guard let url = BaiduTileLayout.tileURL(for: key) else {
             completeTile(key, generation: generation, image: nil, error: MapTileError.invalidURL)
             return
         }
@@ -379,7 +344,7 @@ final class MapTileContainer: UIView {
         pendingTiles.remove(key)
 
         if let image {
-            imageCache.setObject(image, forKey: cacheKey(for: key))
+            imageCache.setObject(image, forKey: key.cacheKey)
             tileViews[key]?.imageView.image = image
             loadedTileCount += 1
         } else if let error, firstError == nil {
@@ -432,96 +397,45 @@ final class MapTileContainer: UIView {
     }
 }
 
-private extension MapSource {
-    var initialZoom: Int { 16 }
+/// Tile geometry and endpoints for 百度. 高德 renders through its native 3D SDK,
+/// so no 高德 raster path exists any more.
+private enum BaiduTileLayout {
+    static let initialZoom = 16
+    static let zoomRange: ClosedRange<Int> = 3...18
 
-    var zoomRange: ClosedRange<Int> {
-        switch self {
-        case .amap:
-            return 3...18
-        case .baidu:
-            return 3...18
-        }
+    static func worldPoint(forWGS84 coordinate: CLLocationCoordinate2D, zoom: Int) -> CGPoint {
+        BaiduMercator.worldPoint(for: ChinaCoordinateConverter.wgs84ToBD09(coordinate), zoom: zoom)
     }
 
-    func worldPoint(forWGS84 coordinate: CLLocationCoordinate2D, zoom: Int) -> CGPoint {
-        switch self {
-        case .amap:
-            return AMapWebMercator.worldPoint(for: ChinaCoordinateConverter.wgs84ToGCJ02(coordinate), zoom: zoom)
-        case .baidu:
-            return BaiduMercator.worldPoint(for: ChinaCoordinateConverter.wgs84ToBD09(coordinate), zoom: zoom)
-        }
+    static func wgs84Coordinate(for worldPoint: CGPoint, zoom: Int) -> CLLocationCoordinate2D {
+        ChinaCoordinateConverter.bd09ToWGS84(BaiduMercator.coordinate(for: worldPoint, zoom: zoom))
     }
 
-    func wgs84Coordinate(for worldPoint: CGPoint, zoom: Int) -> CLLocationCoordinate2D {
-        switch self {
-        case .amap:
-            return ChinaCoordinateConverter.gcj02ToWGS84(AMapWebMercator.coordinate(for: worldPoint, zoom: zoom))
-        case .baidu:
-            return ChinaCoordinateConverter.bd09ToWGS84(BaiduMercator.coordinate(for: worldPoint, zoom: zoom))
-        }
+    static func rawTileYRange(zoom: Int) -> ClosedRange<Int> {
+        let maximumTile = BaiduMercator.maximumRawTileYCoordinate(zoom: zoom)
+        return -maximumTile...maximumTile
     }
 
-    func rawTileYRange(zoom: Int) -> ClosedRange<Int> {
-        switch self {
-        case .amap:
-            return 0...((1 << zoom) - 1)
-        case .baidu:
-            let maximumTile = BaiduMercator.maximumRawTileYCoordinate(zoom: zoom)
-            return -maximumTile...maximumTile
-        }
+    static func tileKey(rawX: Int, rawY: Int, zoom: Int) -> MapTileKey {
+        MapTileKey(zoom: zoom, x: rawX, y: -rawY - 1)
     }
 
-    func tileKey(rawX: Int, rawY: Int, zoom: Int) -> MapTileKey {
-        switch self {
-        case .amap:
-            let tileCount = 1 << zoom
-            let remainder = rawX % tileCount
-            let x = remainder >= 0 ? remainder : remainder + tileCount
-            return MapTileKey(zoom: zoom, x: x, y: rawY)
-        case .baidu:
-            return MapTileKey(zoom: zoom, x: rawX, y: -rawY - 1)
-        }
-    }
-
-    func tileURL(for key: MapTileKey, style: AMapMapStyle) -> URL? {
-        switch self {
-        case .amap:
-            // These `appmaptile` endpoints need no API Key. The style code and
-            // the host family must agree: webrd serves the vector-rendered
-            // base map, webst serves satellite imagery.
-            let hostIndex = (key.x + key.y) % 4 + 1
-            var components = URLComponents()
-            components.scheme = "https"
-            components.host = "\(style.amapRasterTileHostPrefix)0\(hostIndex).is.autonavi.com"
-            components.path = "/appmaptile"
-            components.queryItems = [
-                URLQueryItem(name: "lang", value: "zh_cn"),
-                URLQueryItem(name: "size", value: "1"),
-                URLQueryItem(name: "scale", value: "2"),
-                URLQueryItem(name: "style", value: style.amapRasterTileStyle),
-                URLQueryItem(name: "x", value: String(key.x)),
-                URLQueryItem(name: "y", value: String(key.y)),
-                URLQueryItem(name: "z", value: String(key.zoom))
-            ]
-            return components.url
-        case .baidu:
-            let hostIndex = abs(key.x + key.y) % 4
-            var components = URLComponents()
-            components.scheme = "https"
-            components.host = "maponline\(hostIndex).bdimg.com"
-            components.path = "/tile/"
-            components.queryItems = [
-                URLQueryItem(name: "qt", value: "tile"),
-                URLQueryItem(name: "x", value: String(key.x)),
-                URLQueryItem(name: "y", value: String(key.y)),
-                URLQueryItem(name: "z", value: String(key.zoom)),
-                URLQueryItem(name: "styles", value: "pl"),
-                URLQueryItem(name: "scaler", value: "2"),
-                URLQueryItem(name: "p", value: "1")
-            ]
-            return components.url
-        }
+    static func tileURL(for key: MapTileKey) -> URL? {
+        let hostIndex = abs(key.x + key.y) % 4
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "maponline\(hostIndex).bdimg.com"
+        components.path = "/tile/"
+        components.queryItems = [
+            URLQueryItem(name: "qt", value: "tile"),
+            URLQueryItem(name: "x", value: String(key.x)),
+            URLQueryItem(name: "y", value: String(key.y)),
+            URLQueryItem(name: "z", value: String(key.zoom)),
+            URLQueryItem(name: "styles", value: "pl"),
+            URLQueryItem(name: "scaler", value: "2"),
+            URLQueryItem(name: "p", value: "1")
+        ]
+        return components.url
     }
 }
 
@@ -561,31 +475,6 @@ private enum MapTileError: LocalizedError {
 
 private enum MapTileProjection {
     static let tileSize: CGFloat = 256
-}
-
-private enum AMapWebMercator {
-    private static let maximumLatitude = 85.051_128_78
-
-    static func worldPoint(for coordinate: CLLocationCoordinate2D, zoom: Int) -> CGPoint {
-        let latitude = min(max(coordinate.latitude, -maximumLatitude), maximumLatitude)
-        let worldSize = Double(MapTileProjection.tileSize) * pow(2, Double(zoom))
-        let latitudeRadians = latitude * Double.pi / 180
-        let x = (coordinate.longitude + 180) / 360 * worldSize
-        let y = (1 - log(tan(latitudeRadians) + 1 / cos(latitudeRadians)) / Double.pi) / 2 * worldSize
-        return CGPoint(x: x, y: y)
-    }
-
-    static func coordinate(for point: CGPoint, zoom: Int) -> CLLocationCoordinate2D {
-        let worldSize = Double(MapTileProjection.tileSize) * pow(2, Double(zoom))
-        var x = Double(point.x).truncatingRemainder(dividingBy: worldSize)
-        if x < 0 { x += worldSize }
-        let y = min(max(Double(point.y), 0), worldSize)
-        let longitude = x / worldSize * 360 - 180
-        let mercatorY = y / worldSize
-        let n = Double.pi - 2 * Double.pi * mercatorY
-        let latitude = 180 / Double.pi * atan(0.5 * (exp(n) - exp(-n)))
-        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-    }
 }
 
 private enum BaiduMercator {

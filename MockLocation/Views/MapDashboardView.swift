@@ -9,7 +9,6 @@ struct MapDashboardView: View {
     @State private var mapError: String?
     @State private var mapReloadToken = 0
     @AppStorage(AMapSDKConfiguration.apiKeyDefaultsKey) private var amapAPIKey = ""
-    @AppStorage(AMapSDKConfiguration.useNativeSDKDefaultsKey) private var preferNativeAMapSDK = false
     @State private var latitudeText = ""
     @State private var longitudeText = ""
     @State private var showFavoriteName = false
@@ -57,19 +56,9 @@ struct MapDashboardView: View {
             }
         }
         .navigationViewStyle(.stack)
-        .onAppear {
-            syncCoordinateFields()
-            normalizeStyleForProvider()
-        }
+        .onAppear(perform: syncCoordinateFields)
         .onChange(of: repository.selectedCoordinate) { _ in syncCoordinateFields() }
-        .onChange(of: mapSource) { _ in
-            mapError = nil
-            normalizeStyleForProvider()
-        }
-        .onChange(of: preferNativeAMapSDK) { _ in
-            mapError = nil
-            normalizeStyleForProvider()
-        }
+        .onChange(of: mapSource) { _ in mapError = nil }
         .onChange(of: amapStyle) { _ in mapError = nil }
         .alert("收藏地点", isPresented: $showFavoriteName) {
             TextField("名称", text: $favoriteName)
@@ -82,26 +71,15 @@ struct MapDashboardView: View {
         !amapAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// The native 3D SDK is opt-in. It needs an iOS-platform Key bound to this
-    /// Bundle ID; without one 高德 rejects authentication and serves no tiles.
-    private var usesNativeAMapSDK: Bool { mapSource == .amap && preferNativeAMapSDK }
-
-    private var availableStyles: [AMapMapStyle] {
-        usesNativeAMapSDK ? AMapMapStyle.allCases : AMapMapStyle.rasterRenderable
-    }
-
-    private var rasterStyle: AMapMapStyle {
-        AMapMapStyle.rasterRenderable.contains(amapStyle) ? amapStyle : .satellite
-    }
-
     private var mapViewIdentity: String {
-        let effectiveStyle = usesNativeAMapSDK ? amapStyle : rasterStyle
-        return "\(mapSource.title)-\(usesNativeAMapSDK ? "sdk" : "raster")-\(effectiveStyle.title)-\(mapReloadToken)"
+        "\(mapSource.title)-\(amapStyle.title)-\(mapReloadToken)"
     }
 
     @ViewBuilder
     private var mapSurface: some View {
-        if usesNativeAMapSDK {
+        if mapSource == .amap {
+            // 高德 renders exclusively through the native 3D SDK, which needs an
+            // iOS-platform Key bound to this Bundle ID.
             if hasAMapAPIKey {
                 LocationAMapSDKView(
                     style: amapStyle,
@@ -114,18 +92,11 @@ struct MapDashboardView: View {
             }
         } else {
             LocationMapProviderView(
-                source: mapSource,
-                style: rasterStyle,
                 coordinate: $repository.selectedCoordinate,
                 title: $repository.selectedTitle,
                 mapError: $mapError
             )
         }
-    }
-
-    private func normalizeStyleForProvider() {
-        guard !usesNativeAMapSDK, !AMapMapStyle.rasterRenderable.contains(amapStyle) else { return }
-        amapStyle = .satellite
     }
 
     private var amapKeyPlaceholder: some View {
@@ -205,7 +176,7 @@ struct MapDashboardView: View {
 
             if mapSource == .amap {
                 Picker("\u{5730}\u{56FE}\u{6A21}\u{5F0F}", selection: $amapStyle) {
-                    ForEach(availableStyles) { style in
+                    ForEach(AMapMapStyle.allCases) { style in
                         Text(style.title).tag(style)
                     }
                 }

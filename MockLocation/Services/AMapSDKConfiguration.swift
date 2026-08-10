@@ -3,9 +3,6 @@ import Foundation
 
 enum AMapSDKConfiguration {
     static let apiKeyDefaultsKey = "amap-sdk-api-key"
-    /// When false the 高德 tab renders through the key-free raster tile
-    /// pipeline instead of the native 3D SDK.
-    static let useNativeSDKDefaultsKey = "amap-use-native-sdk"
     /// Selects the native SDK's renderer. Mirrors `AMapMetalEnabledDefaultsKey`
     /// in AMapMapViewFactory.m. Absent means Metal.
     static let metalEnabledDefaultsKey = "amap-metal-enabled"

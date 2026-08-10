@@ -5,7 +5,6 @@ struct SettingsView: View {
     @EnvironmentObject private var simulation: LocationSimulationService
     @State private var showingResetConfirmation = false
     @State private var amapAPIKey = AMapSDKConfiguration.storedAPIKey
-    @AppStorage(AMapSDKConfiguration.useNativeSDKDefaultsKey) private var preferNativeAMapSDK = false
     @AppStorage(AMapSDKConfiguration.metalEnabledDefaultsKey) private var metalEnabled = true
     @State private var amapKeySaveNotice: AMapKeySaveNotice?
 
@@ -63,58 +62,50 @@ struct SettingsView: View {
 
     private var amapKeySection: some View {
         Section {
-            Toggle(isOn: $preferNativeAMapSDK) {
-                Text("使用高德原生 SDK")
+            SecureField("iOS Key", text: $amapAPIKey)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textContentType(.password)
+
+            HStack(alignment: .firstTextBaseline) {
+                Text("Bundle ID")
+                Spacer()
+                Text(Bundle.main.bundleIdentifier ?? "com.personal.mocklocation")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.trailing)
             }
 
-            if preferNativeAMapSDK {
-                SecureField("iOS Key", text: $amapAPIKey)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .textContentType(.password)
+            Button {
+                saveAMapAPIKey()
+            } label: {
+                Label("保存 Key", systemImage: "checkmark")
+            }
 
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Bundle ID")
-                    Spacer()
-                    Text(Bundle.main.bundleIdentifier ?? "com.personal.mocklocation")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.trailing)
-                }
-
-                Button {
+            if AMapSDKConfiguration.isConfigured {
+                Button(role: .destructive) {
+                    amapAPIKey = ""
                     saveAMapAPIKey()
                 } label: {
-                    Label("保存 Key", systemImage: "checkmark")
+                    Label("清除 Key", systemImage: "trash")
                 }
+            }
 
-                if AMapSDKConfiguration.isConfigured {
-                    Button(role: .destructive) {
-                        amapAPIKey = ""
-                        saveAMapAPIKey()
-                    } label: {
-                        Label("清除 Key", systemImage: "trash")
-                    }
-                }
+            Toggle(isOn: $metalEnabled) {
+                Text("使用 Metal 渲染")
+            }
 
-                Toggle(isOn: $metalEnabled) {
-                    Text("使用 Metal 渲染")
-                }
-
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Metal 设备")
-                    Spacer()
-                    Text(metalDeviceState)
-                        .font(.footnote)
-                        .foregroundColor(AMapMapViewFactory.isMetalAvailable() ? .secondary : .orange)
-                }
+            HStack(alignment: .firstTextBaseline) {
+                Text("Metal 设备")
+                Spacer()
+                Text(metalDeviceState)
+                    .font(.footnote)
+                    .foregroundColor(AMapMapViewFactory.isMetalAvailable() ? .secondary : .orange)
             }
         } header: {
             Text("高德地图")
         } footer: {
-            Text(preferNativeAMapSDK
-                 ? "原生 SDK 的 Key 平台需为「iOS」且 Bundle ID 与上面一致。如果地图数据显示已加载完成但画面空白，那是渲染器没有出帧，可切换上面的 Metal 开关；切换后需要完全退出并重新打开应用才生效。"
-                 : "当前使用免 Key 栅格底图，直接取高德公开瓦片服务，不需要 API Key，也不受鉴权、渲染器与私有权限影响。")
+            Text("高德地图通过原生 3D SDK 渲染，必须配置 Key：平台为「iOS」且绑定的 Bundle ID 与上面一致。如果地图数据显示已加载完成但画面空白，那是渲染器没有出帧，可切换上面的 Metal 开关；切换后需要完全退出并重新打开应用才生效。")
                 .font(.footnote)
         }
     }

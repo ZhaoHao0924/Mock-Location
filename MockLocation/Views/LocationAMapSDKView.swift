@@ -357,7 +357,7 @@ struct LocationAMapSDKView: UIViewRepresentable {
                     // wired to the base map's internal pipeline, so it can read
                     // zero on a perfectly healthy map. Do not draw conclusions
                     // about authentication from it.
-                    self.setMapError("\(MapSource.amap.title) SDK 报告地图数据已加载完成，但画面没有内容，通常是渲染器没有出帧。可在设置中关闭 Metal 渲染改用 GLES，或关闭「使用高德原生 SDK」改用免 Key 底图。\(AMapSDKConfiguration.diagnosticSummary)。")
+                    self.setMapError("\(MapSource.amap.title) SDK 报告地图数据已加载完成，但画面没有内容，通常是渲染器没有出帧。可在设置中切换 Metal 渲染开关后完全退出并重新打开应用。\(AMapSDKConfiguration.diagnosticSummary)。")
                 } else if self.didInitializeMap && self.didStartLoadingMap {
                     self.setMapError("\(MapSource.amap.title) SDK \u{5DF2}\u{5F00}\u{59CB}\u{52A0}\u{8F7D}\u{4F46}\u{672A}\u{83B7}\u{5F97}\u{5730}\u{56FE}\u{6570}\u{636E}\u{3002}\u{8BF7}\u{68C0}\u{67E5}\u{7F51}\u{7EDC}\u{540E}\u{91CD}\u{8BD5}\u{3002}")
                 } else if self.didInitializeMap {

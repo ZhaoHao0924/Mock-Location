@@ -39,15 +39,18 @@ changes any location state, so unsupported OS versions fail closed.
 
 ## Map rendering
 
-Both the 高德 and 百度 tabs render through a built-in raster tile view that
-needs no API Key. This is the default and is unaffected by SDK authentication,
-private entitlements, or the 3D resource bundle.
+The 高德 tab renders exclusively through the native AMap 3D SDK. It requires an
+API Key whose platform is iOS and whose bound Bundle ID is exactly
+`com.personal.mocklocation`, entered under Settings > 高德地图. Tap the map to
+move the pin, or press and hold the pin to drag it.
 
-The native AMap 3D SDK is opt-in under Settings > 高德地图 > 使用高德原生 SDK.
-It requires an API Key whose platform is iOS and whose bound Bundle ID is
-exactly `com.personal.mocklocation`. A Web Service Key, or a Key bound to a
-different Bundle ID, fails authentication; the SDK then issues no tile requests
-at all and the base map stays blank while the 高德 logo still draws.
+The 百度 tab renders through a built-in raster tile view that needs no API Key.
+
+The native SDK needs GPU access, which under an ad-hoc TrollStore signature
+comes from `com.apple.security.exception.iokit-user-client-class` in the
+entitlements. Without it `MTLCreateSystemDefaultDevice()` returns nil and the
+base map stays blank while the 高德 logo still draws. Settings reports the
+renderer and whether a Metal device is creatable.
 
 ## Project layout
 
