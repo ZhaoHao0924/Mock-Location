@@ -44,6 +44,9 @@ enum AMapMapStyle: CaseIterable, Hashable, Identifiable {
 
 final class AMapMapContainerView: UIView {
     private(set) var mapView: MAMapView?
+    var onMapReadyForDisplay: ((MAMapView) -> Void)?
+
+    private var hasReportedDisplayReadiness = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -56,17 +59,35 @@ final class AMapMapContainerView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard !bounds.isEmpty else { return }
-        mapView?.frame = bounds
+        layoutMapViewIfNeeded()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        layoutMapViewIfNeeded()
     }
 
     func attach(_ mapView: MAMapView) {
         self.mapView = mapView
-        if !bounds.isEmpty {
-            mapView.frame = bounds
-        }
         mapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(mapView)
+        layoutMapViewIfNeeded()
+    }
+
+    private func layoutMapViewIfNeeded() {
+        guard let mapView, bounds.width >= 1, bounds.height >= 1 else { return }
+        mapView.frame = bounds
+
+        guard window != nil, !hasReportedDisplayReadiness else { return }
+        hasReportedDisplayReadiness = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let mapView = self.mapView, self.window != nil else {
+                self?.hasReportedDisplayReadiness = false
+                return
+            }
+            mapView.frame = self.bounds
+            self.onMapReadyForDisplay?(mapView)
+        }
     }
 }
 
@@ -80,19 +101,21 @@ struct LocationAMapSDKView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> AMapMapContainerView {
         let container = AMapMapContainerView(frame: .zero)
+        container.onMapReadyForDisplay = { [weak coordinator = context.coordinator] mapView in
+            coordinator?.mapBecameReadyForDisplay(mapView)
+        }
         let resourceStatus = AMapMapViewFactory.resourceBundleStatus()
         guard let mapView = AMapMapViewFactory.mapView(withFrame: .zero) else {
             context.coordinator.setMapError("\(MapSource.amap.title) SDK \u{65E0}\u{6CD5}\u{521B}\u{5EFA}\u{5730}\u{56FE}\u{89C6}\u{56FE}\u{3002}")
             return container
         }
 
-        container.attach(mapView)
         mapView.delegate = context.coordinator
         mapView.showsCompass = false
         mapView.showsScale = false
         mapView.zoomLevel = 16
-        context.coordinator.apply(style: style, to: mapView)
-        context.coordinator.updateSelection(on: mapView, centerOnSelection: true)
+        context.coordinator.register(mapView)
+        container.attach(mapView)
 
         if resourceStatus != 0 {
             context.coordinator.setMapError("\(MapSource.amap.title) SDK \u{8D44}\u{6E90}\u{914D}\u{7F6E}\u{5931}\u{8D25}\u{FF08}\(resourceStatus)\u{FF09}\u{3002}")
@@ -108,8 +131,7 @@ struct LocationAMapSDKView: UIViewRepresentable {
             context.coordinator.setMapError("\(MapSource.amap.title) SDK \u{65E0}\u{6CD5}\u{521B}\u{5EFA}\u{5730}\u{56FE}\u{89C6}\u{56FE}\u{3002}")
             return
         }
-        context.coordinator.apply(style: style, to: mapView)
-        context.coordinator.updateSelection(on: mapView, centerOnSelection: false)
+        context.coordinator.updateMapIfDisplayed(mapView)
     }
 
     final class Coordinator: NSObject, MAMapViewDelegate {
@@ -117,9 +139,42 @@ struct LocationAMapSDKView: UIViewRepresentable {
 
         private var annotation: MAPointAnnotation?
         private var displayedCoordinate: GeoCoordinate?
+        private weak var registeredMapView: MAMapView?
+        private var mapIsReadyForDisplay = false
+        private var didInitializeMap = false
+        private var didStartLoadingMap = false
+        private var didFinishLoadingMap = false
+        private var didFailLoadingMap = false
+        private var didReportLoadWatchdog = false
+        private var loadWatchdog: DispatchWorkItem?
 
         init(parent: LocationAMapSDKView) {
             self.parent = parent
+        }
+
+        deinit {
+            loadWatchdog?.cancel()
+        }
+
+        func register(_ mapView: MAMapView) {
+            registeredMapView = mapView
+        }
+
+        func mapBecameReadyForDisplay(_ mapView: MAMapView) {
+            guard registeredMapView === mapView, !mapIsReadyForDisplay else { return }
+            mapIsReadyForDisplay = true
+            apply(style: parent.style, to: mapView)
+            updateSelection(on: mapView, centerOnSelection: true)
+
+            // Refresh only after SwiftUI has attached the map to a visible UIKit container.
+            mapView.forceRefresh()
+            scheduleLoadWatchdog(for: mapView)
+        }
+
+        func updateMapIfDisplayed(_ mapView: MAMapView) {
+            guard registeredMapView === mapView, mapIsReadyForDisplay else { return }
+            apply(style: parent.style, to: mapView)
+            updateSelection(on: mapView, centerOnSelection: false)
         }
 
         func apply(style: AMapMapStyle, to mapView: MAMapView) {
@@ -151,12 +206,36 @@ struct LocationAMapSDKView: UIViewRepresentable {
         }
 
         func mapViewDidFinishLoadingMap(_ mapView: MAMapView!) {
+            didFinishLoadingMap = true
+            loadWatchdog?.cancel()
             setMapError(nil)
         }
 
         func mapViewDidFailLoadingMap(_ mapView: MAMapView!, withError error: Error!) {
-            let description = (error as NSError?)?.localizedDescription ?? "\u{672A}\u{77E5}\u{9519}\u{8BEF}"
-            setMapError("\(MapSource.amap.title)\u{52A0}\u{8F7D}\u{5931}\u{8D25}\u{FF1A}\(description)")
+            didFailLoadingMap = true
+            loadWatchdog?.cancel()
+            let nsError = error as NSError?
+            let description = nsError?.localizedDescription ?? "\u{672A}\u{77E5}\u{9519}\u{8BEF}"
+            let detail = nsError.map { "\($0.domain) / \($0.code)" } ?? "\u{65E0}\u{9519}\u{8BEF}\u{7801}"
+            setMapError("\(MapSource.amap.title)\u{52A0}\u{8F7D}\u{5931}\u{8D25}\u{FF08}\(detail)\u{FF09}\u{FF1A}\(description)")
+        }
+
+        func mapViewWillStartLoadingMap(_ mapView: MAMapView!) {
+            didStartLoadingMap = true
+            if didReportLoadWatchdog {
+                didReportLoadWatchdog = false
+                setMapError(nil)
+            }
+        }
+
+        func mapInitComplete(_ mapView: MAMapView!) {
+            didInitializeMap = true
+        }
+
+        func mapView(_ mapView: MAMapView!, didChangeOpenGLESDisabled openGLESDisabled: Bool) {
+            guard openGLESDisabled else { return }
+            loadWatchdog?.cancel()
+            setMapError("\(MapSource.amap.title) SDK \u{7684} iOS \u{56FE}\u{5F62}\u{6E32}\u{67D3}\u{5DF2}\u{88AB}\u{7981}\u{7528}\u{3002}\u{8BF7}\u{91CD}\u{542F}\u{8BBE}\u{5907}\u{540E}\u{91CD}\u{8BD5}\u{3002}")
         }
 
         func mapView(_ mapView: MAMapView!, didLongPressedAt coordinate: CLLocationCoordinate2D) {
@@ -178,6 +257,25 @@ struct LocationAMapSDKView: UIViewRepresentable {
                     self?.parent.mapError = message
                 }
             }
+        }
+
+        private func scheduleLoadWatchdog(for mapView: MAMapView) {
+            loadWatchdog?.cancel()
+            let watchdog = DispatchWorkItem { [weak self, weak mapView] in
+                guard let self, let mapView, self.registeredMapView === mapView,
+                      !self.didFinishLoadingMap, !self.didFailLoadingMap else { return }
+
+                self.didReportLoadWatchdog = true
+                if self.didInitializeMap && self.didStartLoadingMap {
+                    self.setMapError("\(MapSource.amap.title) SDK \u{5DF2}\u{5F00}\u{59CB}\u{52A0}\u{8F7D}\u{4F46}\u{672A}\u{83B7}\u{5F97}\u{5730}\u{56FE}\u{6570}\u{636E}\u{3002}\u{8BF7}\u{68C0}\u{67E5}\u{7F51}\u{7EDC}\u{540E}\u{91CD}\u{8BD5}\u{3002}")
+                } else if self.didInitializeMap {
+                    self.setMapError("\(MapSource.amap.title) SDK \u{5DF2}\u{521D}\u{59CB}\u{5316}\u{FF0C}\u{4F46}\u{672A}\u{5F00}\u{59CB}\u{52A0}\u{8F7D}\u{5730}\u{56FE}\u{3002}\u{8BF7}\u{68C0}\u{67E5} API Key \u{7684} iOS Bundle ID \u{914D}\u{7F6E}\u{548C}\u{7F51}\u{7EDC}\u{3002}")
+                } else {
+                    self.setMapError("\(MapSource.amap.title) SDK \u{672A}\u{5B8C}\u{6210}\u{5730}\u{56FE}\u{5F15}\u{64CE}\u{521D}\u{59CB}\u{5316}\u{3002}\u{8BF7}\u{91CD}\u{542F}\u{8BBE}\u{5907}\u{540E}\u{91CD}\u{8BD5}\u{3002}")
+                }
+            }
+            loadWatchdog = watchdog
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: watchdog)
         }
     }
 }
