@@ -27,56 +27,88 @@ Last updated: 2026-08-10 (Asia/Shanghai)
 - `014e0f8` Pin Xcode project format
 - `8232b4e` Fix Swift bridge error handling
 - `b2fbf77` Correct Swift bridge argument label
+- `5c5e434` Improve AMap tile loading fallback
+- `7c77250` Fix AMap 3D resources and key initialization
+- `0144fc5` Make AMap resource check portable on macOS
 
 ## Current CI state
 
-The validation run is [31358588478](https://github.com/ZhaoHao0924/Mock-Location/actions/runs/31358588478)
-for commit `146bece` (run #40) and completed successfully. XcodeGen
+The latest validation run is [31372572757](https://github.com/ZhaoHao0924/Mock-Location/actions/runs/31372572757)
+for commit `0144fc5` (run #44) and completed successfully. XcodeGen
 generation, the unsigned device build, IPA layout validation, AMap resource
 validation, and artifact upload all passed. The `MockLocation-TrollStore-IPA`
-artifact (ID `9051552582`, about 20.7 MB) is available until 2026-09-09.
+artifact (ID `9056743891`, about 21.3 MB) is available until 2026-09-09.
+
+The downloadable artifact is:
+`https://nightly.link/ZhaoHao0924/Mock-Location/actions/runs/31372572757/MockLocation-TrollStore-IPA.zip`
+
+The final IPA was unpacked independently. It contains `AMap.bundle` with
+`bundleVersion.txt = 11.2.100`, `res.ck`, `res.zip`, `AMap3D.bundle`, and a
+standard base-map style resource.
 
 ## Current debugging status
 
 The nullable factory prevents the startup crash on iOS 15.6.1 with TrollStore
-2.1.1. The first fixed builds reported that the AMap SDK could not create a
-map view; the current build initializes the required privacy state, sets the
-AMap resource bundle path and language before creation, uses a non-empty
-screen frame, and synchronizes the real container bounds after SwiftUI layout.
-The earlier hard-coded key was not supplied for this app's Bundle ID. The
-current build removes it, waits for the owner to save an iOS platform key, and
-shows the actual Bundle ID in Settings before it initializes the map SDK.
+2.1.1. The map view now initializes the required privacy state, sets the AMap
+resource bundle path and language before creation, uses a non-empty screen
+frame, and synchronizes the real container bounds after SwiftUI layout.
+
+The previous run #42 IPA contained a complete 11.2.000 3D resource bundle, so
+the blank base map was not explained by a missing top-level resource alone.
+The latest build upgrades the 3D SDK to 11.2.100, validates the resource
+contents and version at build/runtime, and applies the stored iOS Key before
+AMap engine initialization. This ordering is important because setting the Key
+after the SDK starts can leave markers visible while all base-map tiles fail.
+
+The app deliberately does not embed a user's Key. It stores the user-provided
+Key in `UserDefaults`, shows the exact runtime Bundle ID in Settings, and
+reports only the Key length/last four characters in the map diagnostic banner.
 
 ## Crash fix implementation
 
-The AMap startup crash, zero-frame, privacy, resource, display-lifecycle, and user-key configuration fixes are implemented and passed CI:
+The AMap startup crash, zero-frame, privacy, resource, display-lifecycle, and
+user-key configuration fixes are implemented and passed CI:
 
 - `MockLocation/MockLocation-Bridging-Header.h` imports the Objective-C map
   view factory.
 - `MockLocation/Services/AMapMapViewFactory.h` and `.m` expose nullable
   `MAMapView` creation without Swift's non-optional initializer bridge, prepare
-  the required privacy state, and explicitly configure AMap resources.
-- `MockLocation/Services/AMapSDKConfiguration.swift` stores only a
-  user-provided iOS key and configures it after the native SDK is prepared.
+  the required privacy state, validate the 3D resource bundle/version, and set
+  the validated resource path before map creation.
+- `MockLocation/Services/AMapSDKConfiguration.swift` applies the stored iOS
+  Key during app startup and immediately before map preparation, enables the
+  required privacy agreements, and provides runtime diagnostics.
 - `MockLocation/Views/LocationAMapSDKView.swift` now hosts the optional map
   view in an `AMapMapContainerView`, keeps a non-empty initialization frame,
-  refreshes after UIKit visibility, and reports creation and loading failures
-  in the UI.
+  refreshes after UIKit visibility, and reports creation/loading/resource/Key
+  failures in the UI.
 - `MockLocation/Views/SettingsView.swift` displays the exact Bundle ID and
   provides the key-entry workflow.
+- `Podfile` pins `AMap3DMap-NO-IDFA` to 11.2.100. The build script rejects a
+  missing, incomplete, non-3D, or version-mismatched `AMap.bundle`.
 
 ## Validation status
 
 - `git diff --check` passes.
+- `bash -n Scripts/build-trollstore-ipa.sh` passes.
+- GitHub Actions run #44 completed successfully.
+- The final IPA resource bundle was independently checked after extraction.
 - The XcodeGen `MockLocation` source root recursively contains both factory
   files, so they will be included in the generated target.
+- Device-side map rendering with the new artifact is still pending; local
+  iOS compilation cannot run because this workstation is Windows and has no
+  Xcode, `xcodebuild`, or XcodeGen toolchain.
 
 ## Next session
 
-1. Download artifact `9051552582` and install the generated IPA with TrollStore.
-2. In the AMap console, create an iOS platform SDK key bound to
-   `com.personal.mocklocation`.
-3. In the app, open Settings > 高德地图, paste that key, then return to the map.
+1. Download artifact `9056743891` and install the generated IPA with TrollStore.
+2. Fully terminate and reopen the app after installation. In Settings > 高德地图,
+   enter an iOS platform SDK Key bound to `com.personal.mocklocation`.
+3. Open the map and check that the diagnostic shows `Key ... 已应用` and
+   `3D 资源 11.2.100`.
+4. If the base map is still blank, capture that diagnostic banner (without
+   sharing the full Key) so the remaining network/authentication issue can be
+   distinguished from a resource problem.
 
 Local development cannot run the iOS build because this workstation is Windows
 and has no Xcode, `xcodebuild`, or XcodeGen toolchain.
