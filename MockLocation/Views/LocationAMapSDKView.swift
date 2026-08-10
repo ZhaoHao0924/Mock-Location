@@ -239,12 +239,22 @@ struct LocationAMapSDKView: UIViewRepresentable {
         }
 
         func mapViewDidFailLoadingMap(_ mapView: MAMapView!, withError error: Error!) {
+            let nsError = error as NSError?
+            let description = nsError?.localizedDescription ?? "未知错误"
+
+            // HTTP 304 Not Modified is a *success* for a conditional request:
+            // the cached tile is still valid. 高德 nevertheless routes it through
+            // this failure delegate. Separately, once the map has drawn content,
+            // a late per-resource error says nothing about what is on screen.
+            // Neither case should raise a banner or set didFailLoadingMap, which
+            // would also poison the watchdog's reasoning.
+            let isNotModified = description.contains("304")
+            guard !isNotModified, !didFinishLoadingMap, successfulTileCount == 0 else { return }
+
             didFailLoadingMap = true
             loadWatchdog?.cancel()
-            let nsError = error as NSError?
-            let description = nsError?.localizedDescription ?? "\u{672A}\u{77E5}\u{9519}\u{8BEF}"
-            let detail = nsError.map { "\($0.domain) / \($0.code)" } ?? "\u{65E0}\u{9519}\u{8BEF}\u{7801}"
-            setMapError("\(MapSource.amap.title)\u{52A0}\u{8F7D}\u{5931}\u{8D25}\u{FF08}\(detail)\u{FF09}\u{FF1A}\(description)")
+            let detail = nsError.map { "\($0.domain) / \($0.code)" } ?? "无错误码"
+            setMapError("\(MapSource.amap.title)加载失败（\(detail)）：\(description)")
         }
 
         func mapViewWillStartLoadingMap(_ mapView: MAMapView!) {
