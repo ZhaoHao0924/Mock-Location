@@ -30,11 +30,11 @@ Last updated: 2026-08-10 (Asia/Shanghai)
 
 ## Current CI state
 
-The validation run is [31296238424](https://github.com/ZhaoHao0924/Mock-Location/actions/runs/31296238424)
-for commit `b2fbf77` and completed successfully. XcodeGen generation,
-the unsigned device build, IPA layout validation, and artifact upload all
-passed. The `MockLocation-TrollStore-IPA` artifact (ID `9033025525`) is
-available for 30 days.
+The validation run is [31349184725](https://github.com/ZhaoHao0924/Mock-Location/actions/runs/31349184725)
+for commit `9dc7aec` (run #34) and completed successfully. XcodeGen
+generation, the unsigned device build, IPA layout validation, and artifact
+upload all passed. The `MockLocation-TrollStore-IPA` artifact (ID
+`9048405159`, about 20.7 MB) is available until 2026-09-09.
 
 ## Current debugging status
 
@@ -53,7 +53,7 @@ reports in `C:\Users\Administrator\Desktop\file` show the same failure:
 
 ## Crash fix implementation
 
-The AMap startup crash fix is implemented locally and is ready for CI:
+The AMap startup crash fix is implemented and passed CI:
 
 - `MockLocation/MockLocation-Bridging-Header.h` imports the Objective-C map
   view factory.
@@ -70,8 +70,7 @@ The AMap startup crash fix is implemented locally and is ready for CI:
 
 ## Next session
 
-1. Commit and push the crash fix, then wait for GitHub Actions to generate a
-   new TrollStore IPA.
+1. Download artifact `9048405159` and install the generated IPA with TrollStore.
 2. Delete the old app before installing the new IPA, then verify that the app
    opens and that AMap tiles load on the iOS 15.6.1 test device.
 
