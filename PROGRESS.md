@@ -30,28 +30,29 @@ Last updated: 2026-08-10 (Asia/Shanghai)
 
 ## Current CI state
 
-The validation run is [31350507136](https://github.com/ZhaoHao0924/Mock-Location/actions/runs/31350507136)
-for commit `237422b` (run #35) and completed successfully. XcodeGen
+The validation run is [31352324154](https://github.com/ZhaoHao0924/Mock-Location/actions/runs/31352324154)
+for commit `e7e9400` (run #36) and completed successfully. XcodeGen
 generation, the unsigned device build, IPA layout validation, and artifact
 upload all passed. The `MockLocation-TrollStore-IPA` artifact (ID
-`9048811648`, about 20.7 MB) is available until 2026-09-09.
+`9049420395`, about 20.7 MB) is available until 2026-09-09.
 
 ## Current debugging status
 
-The nullable factory now prevents the startup crash on iOS 15.6.1 with
-TrollStore 2.1.1, but the first fixed build reported that the AMap SDK could
-not create a map view. The factory was being called with a zero-sized frame;
-the follow-up fix initializes it with a non-empty screen frame and synchronizes
-the real container bounds after SwiftUI layout.
+The nullable factory prevents the startup crash on iOS 15.6.1 with TrollStore
+2.1.1. The first fixed builds reported that the AMap SDK could not create a
+map view; the current build initializes the required privacy state before
+creation, uses a non-empty screen frame, and synchronizes the real container
+bounds after SwiftUI layout.
 
 ## Crash fix implementation
 
-The AMap startup crash and zero-frame map creation fixes are implemented and passed CI:
+The AMap startup crash, zero-frame, and privacy-initialization fixes are implemented and passed CI:
 
 - `MockLocation/MockLocation-Bridging-Header.h` imports the Objective-C map
   view factory.
 - `MockLocation/Services/AMapMapViewFactory.h` and `.m` expose nullable
-  `MAMapView` creation without Swift's non-optional initializer bridge.
+  `MAMapView` creation without Swift's non-optional initializer bridge and set
+  the AMap privacy state required before instantiation.
 - `MockLocation/Views/LocationAMapSDKView.swift` now hosts the optional map
   view in an `AMapMapContainerView`, keeps a non-empty initialization frame,
   and reports creation failure in the UI.
@@ -64,7 +65,7 @@ The AMap startup crash and zero-frame map creation fixes are implemented and pas
 
 ## Next session
 
-1. Download artifact `9048811648` and install the generated IPA with TrollStore.
+1. Download artifact `9049420395` and install the generated IPA with TrollStore.
 2. Delete the old app before installing the new IPA, then verify that the app
    opens and that AMap tiles load on the iOS 15.6.1 test device.
 
