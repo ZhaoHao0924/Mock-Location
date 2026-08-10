@@ -66,7 +66,14 @@ struct SettingsView: View {
                 .autocorrectionDisabled()
                 .textContentType(.password)
 
-            LabeledContent("Bundle ID", value: Bundle.main.bundleIdentifier ?? "com.personal.mocklocation")
+            HStack(alignment: .firstTextBaseline) {
+                Text("Bundle ID")
+                Spacer()
+                Text(Bundle.main.bundleIdentifier ?? "com.personal.mocklocation")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.trailing)
+            }
 
             Button {
                 saveAMapAPIKey()
