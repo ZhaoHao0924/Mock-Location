@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject private var simulation: LocationSimulationService
@@ -62,10 +63,26 @@ struct SettingsView: View {
 
     private var amapKeySection: some View {
         Section {
+            // Deliberately no .textContentType(.password): that marks the field
+            // as a password, and iOS then gives the long-press menu over to
+            // AutoFill, which can push 粘贴 out of the menu entirely.
             SecureField("iOS Key", text: $amapAPIKey)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .textContentType(.password)
+
+            HStack(alignment: .firstTextBaseline) {
+                Text("Key 长度")
+                Spacer()
+                Text(keyLengthState)
+                    .font(.footnote)
+                    .foregroundColor(isKeyLengthValid ? .secondary : .orange)
+            }
+
+            Button {
+                pasteAMapAPIKeyFromClipboard()
+            } label: {
+                Label("从剪贴板粘贴", systemImage: "doc.on.clipboard")
+            }
 
             HStack(alignment: .firstTextBaseline) {
                 Text("Bundle ID")
@@ -132,6 +149,28 @@ struct SettingsView: View {
             message = "返回地图页即可加载高德地图。"
         }
         amapKeySaveNotice = AMapKeySaveNotice(title: title, message: message)
+    }
+
+    /// Reads the clipboard directly instead of relying on the long-press menu.
+    /// Keys copied from the 高德 console often carry a trailing newline, so trim.
+    private func pasteAMapAPIKeyFromClipboard() {
+        guard let pasted = UIPasteboard.general.string else {
+            amapKeySaveNotice = AMapKeySaveNotice(
+                title: "剪贴板为空",
+                message: "没有从剪贴板读到文本。请先在高德控制台复制 Key。"
+            )
+            return
+        }
+        amapAPIKey = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var keyLengthState: String {
+        let count = amapAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).count
+        return count == 0 ? "未输入" : "\(count) 位"
+    }
+
+    private var isKeyLengthValid: Bool {
+        amapAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).count == 32
     }
 
     private struct AMapKeySaveNotice: Identifiable {
