@@ -183,48 +183,58 @@ enum BaiduSDKConfiguration {
         }
     }
 
-    /// Tail of the newest SDK log file per module. `BMKBaseLog` names a
-    /// directory per module; the newest file inside holds the current run.
-    static func recentLogExcerpt(maxBytesPerModule: Int = 24_576) -> String {
-        let modules: [(String, BMKMapModule)] = [
-            ("瓦片图模块", BMKMapModuleTile),
-            ("基础地图模块", BMKMapModuleBasic)
-        ]
+    /// Newest log files the SDK has written. `BMKBaseLog` documents its
+    /// default output as directories under Library/Caches, but its path
+    /// accessor's Swift-imported name is unreliable, so this scans the
+    /// filesystem instead: every recent file whose path smells like a 百度
+    /// log, newest first. Falls back to listing the Caches tree so a missing
+    /// log is itself visible.
+    static func recentLogExcerpt(maxBytesPerFile: Int = 24_576, maxFiles: Int = 4) -> String {
         let fileManager = FileManager.default
-        var sections: [String] = []
-
-        for (name, module) in modules {
-            let directory = BMKBaseLog.getLogFilePath(withModule: module) ?? ""
-            guard !directory.isEmpty else {
-                sections.append("【\(name)】未返回日志目录。")
-                continue
-            }
-            guard let entries = try? fileManager.contentsOfDirectory(atPath: directory), !entries.isEmpty else {
-                sections.append("【\(name)】日志目录为空：\(directory)")
-                continue
-            }
-
-            let newest = entries
-                .map { (directory as NSString).appendingPathComponent($0) }
-                .compactMap { path -> (String, Date)? in
-                    guard let date = (try? fileManager.attributesOfItem(atPath: path))?[.modificationDate] as? Date else {
-                        return nil
-                    }
-                    return (path, date)
-                }
-                .max { $0.1 < $1.1 }
-
-            guard let newest, let data = fileManager.contents(atPath: newest.0) else {
-                sections.append("【\(name)】无法读取日志文件：\(directory)")
-                continue
-            }
-            let tail = data.suffix(maxBytesPerModule)
-            let text = String(data: tail, encoding: .utf8)
-                ?? String(decoding: tail, as: UTF8.self)
-            sections.append("【\(name)】\(newest.0)\n\(text)")
+        guard let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            return "无法定位 Library/Caches 目录。"
         }
 
-        return sections.joined(separator: "\n\n====================\n\n")
+        var candidates: [(url: URL, modified: Date)] = []
+        var directoryNames: [String] = []
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .contentModificationDateKey, .fileSizeKey]
+        if let enumerator = fileManager.enumerator(at: cachesURL, includingPropertiesForKeys: keys) {
+            for case let url as URL in enumerator {
+                if enumerator.level > 6 { enumerator.skipDescendants() }
+                guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
+                if values.isDirectory == true {
+                    directoryNames.append(url.path.replacingOccurrences(of: cachesURL.path, with: ""))
+                    continue
+                }
+                guard values.isRegularFile == true, let modified = values.contentModificationDate else { continue }
+                let path = url.path.lowercased()
+                let looksLikeBaidu = path.contains("bmk") || path.contains("baidu") || path.contains("map")
+                let looksLikeLog = path.contains("log") || url.pathExtension.lowercased() == "log"
+                if looksLikeBaidu && looksLikeLog {
+                    candidates.append((url, modified))
+                }
+            }
+        }
+
+        guard !candidates.isEmpty else {
+            let tree = directoryNames.sorted().prefix(80).joined(separator: "\n")
+            return "在 Library/Caches 下没有找到百度日志文件。目录结构：\n\(tree.isEmpty ? "（空）" : tree)"
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM-dd HH:mm:ss"
+        return candidates
+            .sorted { $0.modified > $1.modified }
+            .prefix(maxFiles)
+            .map { candidate in
+                let header = "【\(candidate.url.lastPathComponent) · \(formatter.string(from: candidate.modified))】\n\(candidate.url.path)"
+                guard let data = fileManager.contents(atPath: candidate.url.path) else {
+                    return "\(header)\n（无法读取）"
+                }
+                let tail = data.suffix(maxBytesPerFile)
+                return "\(header)\n\(String(decoding: tail, as: UTF8.self))"
+            }
+            .joined(separator: "\n\n====================\n\n")
     }
 
     /// `start` reported the auth request as sent, but the verdict callback can
