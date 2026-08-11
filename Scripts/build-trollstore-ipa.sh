@@ -262,6 +262,7 @@ sign_bundle "${app_path}" "${project_root}/MockLocation/MockLocation.entitlement
 assert_signed_entitlement "${app_path}" "com.apple.locationd.simulation" "main app"
 assert_signed_entitlement "${app_path}" "platform-application" "main app"
 assert_signed_entitlement "${app_path}" "com.apple.private.security.no-sandbox" "main app"
+assert_signed_entitlement "${app_path}" "com.apple.private.security.storage.AppDataContainers" "main app"
 assert_signed_iokit_exception "${app_path}" "main app"
 
 test -f "${app_path}/Assets.car" || {

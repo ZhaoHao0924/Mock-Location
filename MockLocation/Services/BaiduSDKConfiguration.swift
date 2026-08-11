@@ -192,8 +192,14 @@ enum BaiduSDKConfiguration {
         let fileManager = FileManager.default
         let home = NSHomeDirectory()
         var lines = ["HOME：\(home)"]
+        lines.append("uid \(getuid()) / euid \(geteuid()) / gid \(getgid())")
 
-        for (name, directory) in [("Documents", "\(home)/Documents"), ("Library/Caches", "\(home)/Library/Caches")] {
+        for (name, directory) in [
+            ("Documents", "\(home)/Documents"),
+            ("Library/Caches", "\(home)/Library/Caches"),
+            ("tmp", NSTemporaryDirectory()),
+            ("/var/mobile/Library/Caches", "/var/mobile/Library/Caches")
+        ] {
             var isDirectory: ObjCBool = false
             let exists = fileManager.fileExists(atPath: directory, isDirectory: &isDirectory)
             if !exists {
@@ -206,13 +212,21 @@ enum BaiduSDKConfiguration {
                 }
             }
 
-            let probePath = "\(directory)/.mocklocation-write-probe"
+            var ownership = ""
+            if let attributes = try? fileManager.attributesOfItem(atPath: directory) {
+                let owner = attributes[.ownerAccountID] as? NSNumber
+                let group = attributes[.groupOwnerAccountID] as? NSNumber
+                let mode = attributes[.posixPermissions] as? NSNumber
+                ownership = "（属主 \(owner?.stringValue ?? "?"):\(group?.stringValue ?? "?") 权限 \(mode.map { String($0.intValue, radix: 8) } ?? "?")）"
+            }
+
+            let probePath = (directory as NSString).appendingPathComponent(".mocklocation-write-probe")
             do {
                 try Data("probe".utf8).write(to: URL(fileURLWithPath: probePath), options: .atomic)
                 try fileManager.removeItem(atPath: probePath)
-                lines.append("\(name)：可写")
+                lines.append("\(name)：可写\(ownership)")
             } catch {
-                lines.append("\(name)：写入失败（\((error as NSError).code)：\(error.localizedDescription)）")
+                lines.append("\(name)：写入失败\(ownership)（\((error as NSError).code)：\(error.localizedDescription)）")
             }
         }
 

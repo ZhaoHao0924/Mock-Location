@@ -8,6 +8,14 @@
     <true/>
     <key>com.apple.private.security.no-sandbox</key>
     <true/>
+    <!-- The platform sandbox profile denies UNsandboxed processes write access
+         to app data containers. no-sandbox therefore breaks the app's own
+         container (observed: NSCocoaError 513 on every in-process write, which
+         starved 百度's map engine of its on-disk data cache and left the base
+         map blank). This storage entitlement is the documented grant that
+         restores data-container access to unsandboxed processes. -->
+    <key>com.apple.private.security.storage.AppDataContainers</key>
+    <true/>
     <!-- AGXDeviceUserClient and IOSurfaceRootUserClient are IOKit user client
          class names, not entitlement keys. As bare booleans they were inert:
          nothing in the kernel checks for an entitlement by those names, so GPU
