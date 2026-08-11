@@ -69,6 +69,11 @@ struct LocationBaiduSDKView: UIViewRepresentable {
         /// initialization finished), is the success signal.
         private var didRenderValidData = false
         private var lastRenderError: NSError?
+        /// One automatic cache-clean per view: a poisoned tile cache (e.g.
+        /// laid down by the earlier auth-less runs) is a classic 百度 blank-map
+        /// cause, and clearing it is safe to try exactly once before blaming
+        /// anything else.
+        private var didAttemptCacheClean = false
         private var loadWatchdog: DispatchWorkItem?
         private var sdkStateObserver: NSObjectProtocol?
 
@@ -252,15 +257,25 @@ struct LocationBaiduSDKView: UIViewRepresentable {
                 } else if let code = delegate.networkErrorCode {
                     self.setMapError("\(MapSource.baidu.title) SDK 联网失败（错误码 \(code)）。请检查网络后重试。\(BaiduSDKConfiguration.diagnosticSummary)。")
                 } else {
-                    // Auth is clean yet nothing valid rendered. The render
-                    // flags split the remaining suspects: a dead render loop
-                    // is the GPU/surface, a live loop without valid data is
-                    // the tile data path.
-                    var renderState = "引擎初始化\(self.didFinishLoading ? "已完成" : "未完成")；渲染循环\(self.renderLoopObserved ? "运行中" : "未运行")；有效数据未绘制"
+                    // Auth is clean yet nothing valid rendered. First try the
+                    // one safe self-repair — clear the tile cache and redraw —
+                    // then report with the render flags, which split the
+                    // remaining suspects: a dead render loop is the
+                    // GPU/surface, a live loop without valid data is the tile
+                    // data path.
+                    if !self.didAttemptCacheClean {
+                        self.didAttemptCacheClean = true
+                        mapView.cleanCache(with: .standard)
+                        mapView.mapForceRefresh()
+                        self.setMapError("\(MapSource.baidu.title)底图未绘制，已自动清除地图缓存并重试……")
+                        self.scheduleLoadWatchdog(for: mapView)
+                        return
+                    }
+                    var renderState = "引擎初始化\(self.didFinishLoading ? "已完成" : "未完成")；渲染循环\(self.renderLoopObserved ? "运行中" : "未运行")；有效数据未绘制；已尝试清除缓存"
                     if let error = self.lastRenderError {
                         renderState += "；渲染错误 \(error.domain) \(error.code)"
                     }
-                    self.setMapError("\(MapSource.baidu.title)鉴权已通过但底图没有绘制出来（\(renderState)）。\(BaiduSDKConfiguration.diagnosticSummary)。")
+                    self.setMapError("\(MapSource.baidu.title)鉴权已通过但底图没有绘制出来（\(renderState)）。可在设置页查看百度地图日志。\(BaiduSDKConfiguration.diagnosticSummary)。")
                 }
             }
             loadWatchdog = watchdog

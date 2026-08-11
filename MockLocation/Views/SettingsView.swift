@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject private var simulation: LocationSimulationService
@@ -173,6 +174,12 @@ struct SettingsView: View {
                         .foregroundColor(.secondary)
                 }
 
+                NavigationLink {
+                    BaiduLogView()
+                } label: {
+                    Label("查看百度地图日志", systemImage: "doc.text.magnifyingglass")
+                }
+
                 Button(role: .destructive) {
                     baiduAPIKey = ""
                     saveBaiduAPIKey()
@@ -236,6 +243,48 @@ struct SettingsView: View {
         let id = UUID()
         let title: String
         let message: String
+    }
+
+    private struct BaiduLogView: View {
+        @State private var logText = ""
+
+        var body: some View {
+            ScrollView {
+                Text(logText.isEmpty ? "正在读取日志……" : logText)
+                    .font(.system(size: 11, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .textSelection(.enabled)
+            }
+            .navigationTitle("百度地图日志")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button {
+                        UIPasteboard.general.string = logText
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .accessibilityLabel("复制全部日志")
+                    Button {
+                        loadLog()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .accessibilityLabel("刷新日志")
+                }
+            }
+            .onAppear(perform: loadLog)
+        }
+
+        private func loadLog() {
+            DispatchQueue.global(qos: .userInitiated).async {
+                let text = BaiduSDKConfiguration.recentLogExcerpt()
+                DispatchQueue.main.async {
+                    logText = text.isEmpty ? "没有读到日志内容。" : text
+                }
+            }
+        }
     }
 
     @ViewBuilder

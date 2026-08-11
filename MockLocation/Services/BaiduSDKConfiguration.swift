@@ -166,6 +166,11 @@ enum BaiduSDKConfiguration {
         guard mapManager == nil else { return }
 
         BMKMapManager.setAgreePrivacy(true)
+        // File logging must be on before the engine starts so its data
+        // pipeline failures are recorded. The files land under Library/Caches
+        // and Settings exposes them through 查看百度地图日志.
+        BMKBaseLog.setlogEnable(true, module: BMKMapModuleTile)
+        BMKBaseLog.setlogEnable(true, module: BMKMapModuleBasic)
         // Prefer the SDK's own singleton. `BMKMapManager.h` both declares
         // `sharedInstance` and defines a `BMKMapManagerInstance` macro around
         // it, so SDK internals may route through that object; a separately
@@ -176,6 +181,50 @@ enum BaiduSDKConfiguration {
             configuredAPIKey = apiKey
             engineStartedAt = Date()
         }
+    }
+
+    /// Tail of the newest SDK log file per module. `BMKBaseLog` names a
+    /// directory per module; the newest file inside holds the current run.
+    static func recentLogExcerpt(maxBytesPerModule: Int = 24_576) -> String {
+        let modules: [(String, BMKMapModule)] = [
+            ("瓦片图模块", BMKMapModuleTile),
+            ("基础地图模块", BMKMapModuleBasic)
+        ]
+        let fileManager = FileManager.default
+        var sections: [String] = []
+
+        for (name, module) in modules {
+            let directory = BMKBaseLog.getLogFilePath(withModule: module) ?? ""
+            guard !directory.isEmpty else {
+                sections.append("【\(name)】未返回日志目录。")
+                continue
+            }
+            guard let entries = try? fileManager.contentsOfDirectory(atPath: directory), !entries.isEmpty else {
+                sections.append("【\(name)】日志目录为空：\(directory)")
+                continue
+            }
+
+            let newest = entries
+                .map { (directory as NSString).appendingPathComponent($0) }
+                .compactMap { path -> (String, Date)? in
+                    guard let date = (try? fileManager.attributesOfItem(atPath: path))?[.modificationDate] as? Date else {
+                        return nil
+                    }
+                    return (path, date)
+                }
+                .max { $0.1 < $1.1 }
+
+            guard let newest, let data = fileManager.contents(atPath: newest.0) else {
+                sections.append("【\(name)】无法读取日志文件：\(directory)")
+                continue
+            }
+            let tail = data.suffix(maxBytesPerModule)
+            let text = String(data: tail, encoding: .utf8)
+                ?? String(decoding: tail, as: UTF8.self)
+            sections.append("【\(name)】\(newest.0)\n\(text)")
+        }
+
+        return sections.joined(separator: "\n\n====================\n\n")
     }
 
     /// `start` reported the auth request as sent, but the verdict callback can
