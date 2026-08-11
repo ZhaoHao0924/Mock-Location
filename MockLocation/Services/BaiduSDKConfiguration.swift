@@ -183,6 +183,54 @@ enum BaiduSDKConfiguration {
         }
     }
 
+    /// In-process filesystem health. UserDefaults and the keychain both write
+    /// through system daemons (cfprefsd, securityd), so their working proves
+    /// nothing about this process's own file I/O — which is what 百度's engine
+    /// uses for its map-data cache. A blank map with a live render loop and
+    /// clean auth is exactly what failed in-process writes would produce.
+    static var storageDiagnostics: String {
+        let fileManager = FileManager.default
+        let home = NSHomeDirectory()
+        var lines = ["HOME：\(home)"]
+
+        for (name, directory) in [("Documents", "\(home)/Documents"), ("Library/Caches", "\(home)/Library/Caches")] {
+            var isDirectory: ObjCBool = false
+            let exists = fileManager.fileExists(atPath: directory, isDirectory: &isDirectory)
+            if !exists {
+                do {
+                    try fileManager.createDirectory(atPath: directory, withIntermediateDirectories: true)
+                    lines.append("\(name)：不存在，已创建")
+                } catch {
+                    lines.append("\(name)：不存在且无法创建（\((error as NSError).code)：\(error.localizedDescription)）")
+                    continue
+                }
+            }
+
+            let probePath = "\(directory)/.mocklocation-write-probe"
+            do {
+                try Data("probe".utf8).write(to: URL(fileURLWithPath: probePath), options: .atomic)
+                try fileManager.removeItem(atPath: probePath)
+                lines.append("\(name)：可写")
+            } catch {
+                lines.append("\(name)：写入失败（\((error as NSError).code)：\(error.localizedDescription)）")
+            }
+        }
+
+        // Any directory 百度 managed to create is evidence of where (and
+        // whether) its engine is writing.
+        var baiduDirs: [String] = []
+        for base in [home, "\(home)/Documents", "\(home)/Library", "\(home)/Library/Caches"] {
+            for entry in (try? fileManager.contentsOfDirectory(atPath: base)) ?? [] {
+                if entry.lowercased().contains("baidu") || entry.lowercased().contains("bmk") {
+                    baiduDirs.append("\(base)/\(entry)")
+                }
+            }
+        }
+        lines.append(baiduDirs.isEmpty ? "未发现任何百度数据目录" : "百度数据目录：\n" + baiduDirs.joined(separator: "\n"))
+
+        return lines.joined(separator: "\n")
+    }
+
     /// Newest log files the SDK has written. `BMKBaseLog` documents its
     /// default output as directories under Library/Caches, but its path
     /// accessor's Swift-imported name is unreliable, so this scans the
@@ -191,19 +239,22 @@ enum BaiduSDKConfiguration {
     /// log is itself visible.
     static func recentLogExcerpt(maxBytesPerFile: Int = 24_576, maxFiles: Int = 4) -> String {
         let fileManager = FileManager.default
-        guard let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            return "无法定位 Library/Caches 目录。"
-        }
+        let home = NSHomeDirectory()
+        let searchRoots = [
+            URL(fileURLWithPath: "\(home)/Library"),
+            URL(fileURLWithPath: "\(home)/Documents")
+        ]
 
         var candidates: [(url: URL, modified: Date)] = []
         var directoryNames: [String] = []
         let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .contentModificationDateKey, .fileSizeKey]
-        if let enumerator = fileManager.enumerator(at: cachesURL, includingPropertiesForKeys: keys) {
+        for root in searchRoots {
+            guard let enumerator = fileManager.enumerator(at: root, includingPropertiesForKeys: keys) else { continue }
             for case let url as URL in enumerator {
                 if enumerator.level > 6 { enumerator.skipDescendants() }
                 guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
                 if values.isDirectory == true {
-                    directoryNames.append(url.path.replacingOccurrences(of: cachesURL.path, with: ""))
+                    directoryNames.append(url.path.replacingOccurrences(of: home, with: ""))
                     continue
                 }
                 guard values.isRegularFile == true, let modified = values.contentModificationDate else { continue }
@@ -218,7 +269,7 @@ enum BaiduSDKConfiguration {
 
         guard !candidates.isEmpty else {
             let tree = directoryNames.sorted().prefix(80).joined(separator: "\n")
-            return "在 Library/Caches 下没有找到百度日志文件。目录结构：\n\(tree.isEmpty ? "（空）" : tree)"
+            return "在 Library 和 Documents 下没有找到百度日志文件。目录结构：\n\(tree.isEmpty ? "（空）" : tree)"
         }
 
         let formatter = DateFormatter()

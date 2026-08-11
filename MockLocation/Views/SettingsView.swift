@@ -279,9 +279,10 @@ struct SettingsView: View {
 
         private func loadLog() {
             DispatchQueue.global(qos: .userInitiated).async {
-                let text = BaiduSDKConfiguration.recentLogExcerpt()
+                let storage = BaiduSDKConfiguration.storageDiagnostics
+                let logs = BaiduSDKConfiguration.recentLogExcerpt()
                 DispatchQueue.main.async {
-                    logText = text.isEmpty ? "没有读到日志内容。" : text
+                    logText = "—— 存储诊断 ——\n\(storage)\n\n—— SDK 日志 ——\n\(logs.isEmpty ? "没有读到日志内容。" : logs)"
                 }
             }
         }
