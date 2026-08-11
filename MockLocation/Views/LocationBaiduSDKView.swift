@@ -15,6 +15,10 @@ struct LocationBaiduSDKView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> BMKMapView {
         BaiduSDKConfiguration.configure()
+        // Recreating the view (map source switch, 刷新/重试) is the user's
+        // retry gesture: if the engine has been running without an auth
+        // verdict, restart it for a fresh auth round.
+        BaiduSDKConfiguration.restartIfAuthStalled()
         // A non-empty initialization frame matters on this device: the 高德
         // SDK's render surface never produced a frame when created at .zero
         // under SwiftUI, and both SDKs drive their surfaces the same way.
@@ -87,10 +91,13 @@ struct LocationBaiduSDKView: UIViewRepresentable {
         }
 
         private func refreshAuthState() {
-            if let code = BaiduSDKGeneralDelegate.shared.permissionErrorCode {
+            let delegate = BaiduSDKGeneralDelegate.shared
+            if let code = delegate.permissionErrorCode {
                 didReportAuthError = true
                 setMapError("\(MapSource.baidu.title) AK 校验未通过（错误码 \(code)）。请确认在百度开放平台创建的是「iOS 端」应用，且安全码与 Bundle ID 一致。\(BaiduSDKConfiguration.diagnosticSummary)。")
-            } else if didReportAuthError, BaiduSDKGeneralDelegate.shared.didReceivePermissionVerdict {
+            } else if delegate.didReceivePermissionVerdict {
+                // A clean verdict supersedes both a previous auth banner and
+                // the watchdog's "no verdict" advisory.
                 didReportAuthError = false
                 setMapError(nil)
             }
@@ -160,11 +167,15 @@ struct LocationBaiduSDKView: UIViewRepresentable {
 
         func mapViewDidFinishLoading(_ mapView: BMKMapView) {
             didFinishLoading = true
-            loadWatchdog?.cancel()
             // "加载完成" is the engine's claim about its data, not proof that
-            // tiles rendered. A pending or later auth failure must stay visible.
-            if BaiduSDKGeneralDelegate.shared.permissionErrorCode == nil {
-                setMapError(nil)
+            // tiles rendered. While the auth verdict is still missing the
+            // watchdog stays armed, because a verdict-less engine draws no
+            // tiles and the user would otherwise see a silent blank map.
+            if BaiduSDKGeneralDelegate.shared.didReceivePermissionVerdict {
+                loadWatchdog?.cancel()
+                if BaiduSDKGeneralDelegate.shared.permissionErrorCode == nil {
+                    setMapError(nil)
+                }
             }
         }
 
@@ -197,14 +208,16 @@ struct LocationBaiduSDKView: UIViewRepresentable {
         private func scheduleLoadWatchdog(for mapView: BMKMapView) {
             loadWatchdog?.cancel()
             let watchdog = DispatchWorkItem { [weak self, weak mapView] in
-                guard let self, let mapView, self.registeredMapView === mapView,
-                      !self.didFinishLoading else { return }
+                guard let self, let mapView, self.registeredMapView === mapView else { return }
+                let delegate = BaiduSDKGeneralDelegate.shared
 
-                if let code = BaiduSDKGeneralDelegate.shared.permissionErrorCode {
+                if let code = delegate.permissionErrorCode {
                     self.setMapError("\(MapSource.baidu.title) AK 校验未通过（错误码 \(code)）。请确认在百度开放平台创建的是「iOS 端」应用，且安全码与 Bundle ID 一致。\(BaiduSDKConfiguration.diagnosticSummary)。")
-                } else if let code = BaiduSDKGeneralDelegate.shared.networkErrorCode {
+                } else if !delegate.didReceivePermissionVerdict {
+                    self.setMapError("\(MapSource.baidu.title) SDK 鉴权一直没有返回结果，底图不会下发。点击「重试」可重启引擎重新鉴权。\(BaiduSDKConfiguration.diagnosticSummary)。")
+                } else if let code = delegate.networkErrorCode {
                     self.setMapError("\(MapSource.baidu.title) SDK 联网失败（错误码 \(code)）。请检查网络后重试。\(BaiduSDKConfiguration.diagnosticSummary)。")
-                } else {
+                } else if !self.didFinishLoading {
                     self.setMapError("\(MapSource.baidu.title) SDK 未在限定时间内完成地图加载。请检查网络与 AK 配置后重试。\(BaiduSDKConfiguration.diagnosticSummary)。")
                 }
             }

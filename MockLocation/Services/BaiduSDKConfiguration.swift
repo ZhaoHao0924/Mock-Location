@@ -19,8 +19,19 @@ final class BaiduSDKGeneralDelegate: NSObject, BMKGeneralDelegate {
     /// True once `onGetPermissionState` has fired at all — distinguishes
     /// "validated successfully" from "no verdict yet" when both codes are nil.
     private(set) var didReceivePermissionVerdict = false
+    private(set) var didReceiveNetworkVerdict = false
+
+    /// A fresh auth round is starting; stale verdicts from the previous
+    /// engine run must not satisfy the new one.
+    func resetForRestart() {
+        permissionErrorCode = nil
+        networkErrorCode = nil
+        didReceivePermissionVerdict = false
+        didReceiveNetworkVerdict = false
+    }
 
     func onGetNetworkState(_ iError: Int32) {
+        didReceiveNetworkVerdict = true
         networkErrorCode = iError == 0 ? nil : iError
         notifyStateChange()
     }
@@ -45,6 +56,9 @@ enum BaiduSDKConfiguration {
     /// tears down the map engine.
     private static var mapManager: BMKMapManager?
     private static var configuredAPIKey: String?
+    private static var engineStartedAt: Date?
+    /// How long a silent auth round can run before a restart is allowed.
+    private static let authVerdictTimeout: TimeInterval = 15
 
     static var isConfigured: Bool { !storedAPIKey.isEmpty }
     /// True when the engine was started with the currently stored key. Like
@@ -69,8 +83,14 @@ enum BaiduSDKConfiguration {
             summary += "；鉴权未返回结果"
         }
         if let code = delegate.networkErrorCode {
-            summary += "；网络错误码 \(code)"
+            summary += "；网络回调错误码 \(code)"
+        } else if delegate.didReceiveNetworkVerdict {
+            summary += "；网络回调正常"
+        } else {
+            summary += "；网络回调未返回"
         }
+        let cuid = (BMKMapManager.getCUID() ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        summary += "；CUID \(cuid.isEmpty ? "为空" : "\(cuid.count) 位")"
         return summary
     }
 
@@ -86,7 +106,35 @@ enum BaiduSDKConfiguration {
         if manager.start(apiKey, generalDelegate: BaiduSDKGeneralDelegate.shared) {
             mapManager = manager
             configuredAPIKey = apiKey
+            engineStartedAt = Date()
         }
+    }
+
+    /// `start` reported the auth request as sent, but the verdict callback can
+    /// go missing entirely (observed on-device). When a started engine has
+    /// produced no verdict for `authVerdictTimeout`, tear it down and start a
+    /// fresh auth round. Returns true when a restart was performed.
+    @discardableResult
+    static func restartIfAuthStalled() -> Bool {
+        guard let manager = mapManager,
+              let startedAt = engineStartedAt,
+              !BaiduSDKGeneralDelegate.shared.didReceivePermissionVerdict,
+              Date().timeIntervalSince(startedAt) > authVerdictTimeout else {
+            return false
+        }
+
+        manager.stop()
+        BaiduSDKGeneralDelegate.shared.resetForRestart()
+        if manager.start(storedAPIKey, generalDelegate: BaiduSDKGeneralDelegate.shared) {
+            engineStartedAt = Date()
+            return true
+        }
+        // The failed restart left the engine stopped; drop it so the next
+        // configure() builds a fresh one instead of assuming a live engine.
+        mapManager = nil
+        configuredAPIKey = nil
+        engineStartedAt = nil
+        return false
     }
 
     @discardableResult

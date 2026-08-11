@@ -7,7 +7,6 @@ struct MockLocationApp: App {
 
     init() {
         AMapSDKConfiguration.configure()
-        BaiduSDKConfiguration.configure()
     }
 
     var body: some Scene {
@@ -19,6 +18,10 @@ struct MockLocationApp: App {
                     repository.consumeLocationURL(url)
                 }
                 .onAppear {
+                    // 百度's engine start must wait for the app to finish
+                    // launching: started from App.init, its async auth verdict
+                    // was observed to never arrive on-device.
+                    BaiduSDKConfiguration.configure()
                     repository.consumePendingSharedLocation()
                     simulation.refreshAvailability()
                 }
