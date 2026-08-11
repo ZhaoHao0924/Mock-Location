@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 extension Notification.Name {
     /// Posted on the main queue whenever 百度's asynchronous auth/network
@@ -14,9 +13,8 @@ extension Notification.Name {
 /// this Bundle ID), so it is kept for diagnostics.
 ///
 /// Every method carries an explicit `@objc`. Implicit inference would very
-/// likely cover these, but the whole failure being investigated is "the SDK
-/// never calls us back", and a selector mismatch produces exactly that
-/// symptom. The annotation removes it from the list of suspects.
+/// likely cover these, but a selector mismatch would silently drop the
+/// callbacks; the annotation removes that failure mode outright.
 final class BaiduSDKGeneralDelegate: NSObject, BMKGeneralDelegate {
     static let shared = BaiduSDKGeneralDelegate()
 
@@ -75,6 +73,7 @@ enum BaiduSDKConfiguration {
     }
     static var storedAPIKey: String { apiKey }
 
+    /// Shown only inside map failure banners.
     static var diagnosticSummary: String {
         let key = storedAPIKey
         let bundleID = Bundle.main.bundleIdentifier ?? "unknown"
@@ -90,72 +89,8 @@ enum BaiduSDKConfiguration {
         }
         if let code = delegate.networkErrorCode {
             summary += "；网络回调错误码 \(code)"
-        } else if delegate.didReceiveNetworkVerdict {
-            summary += "；网络回调正常"
-        } else {
-            summary += "；网络回调未返回"
         }
-        let cuid = (BMKMapManager.getCUID() ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        summary += "；CUID \(cuid.isEmpty ? "为空" : "\(cuid.count) 位")"
-        summary += "；\(keychainState)"
         return summary
-    }
-
-    /// This app is signed ad-hoc for TrollStore and its entitlements carry no
-    /// `application-identifier`, which is what iOS uses to place a process in a
-    /// keychain access group. Without it every `SecItem*` call fails with
-    /// `errSecMissingEntitlement` (-34018). 百度's SDK persists its auth and
-    /// device state through the keychain, so a broken keychain is a credible
-    /// cause of an auth round that starts and then never reports a verdict.
-    static var keychainState: String {
-        let service = "com.personal.mocklocation.keychain-probe"
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: "probe"
-        ]
-
-        SecItemDelete(query as CFDictionary)
-        var insertion = query
-        insertion[kSecValueData as String] = Data("probe".utf8)
-        let status = SecItemAdd(insertion as CFDictionary, nil)
-        SecItemDelete(query as CFDictionary)
-
-        switch status {
-        case errSecSuccess:
-            return "钥匙串可用"
-        case errSecMissingEntitlement:
-            return "钥匙串不可用（-34018 缺少 application-identifier）"
-        default:
-            return "钥匙串写入失败（OSStatus \(status)）"
-        }
-    }
-
-    /// Independent reachability check against 百度's SDK auth host. The SDK's
-    /// own request is opaque, so this answers the one question its silence
-    /// leaves open: can this process talk to that host at all? A 4xx reply
-    /// still proves connectivity — only a transport error rules it out.
-    static func probeNetwork(completion: @escaping (String) -> Void) {
-        guard let url = URL(string: "https://api.map.baidu.com/sdkcs/verify") else {
-            completion("无法构造探测请求。")
-            return
-        }
-
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 12)
-        request.httpMethod = "GET"
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 12
-        URLSession(configuration: configuration).dataTask(with: request) { data, response, error in
-            let message: String
-            if let error = error as NSError? {
-                message = "无法连接 api.map.baidu.com（\(error.domain) \(error.code)）：\(error.localizedDescription)"
-            } else if let response = response as? HTTPURLResponse {
-                message = "已连通 api.map.baidu.com（HTTP \(response.statusCode)，返回 \(data?.count ?? 0) 字节）。"
-            } else {
-                message = "请求完成但没有 HTTP 响应。"
-            }
-            DispatchQueue.main.async { completion(message) }
-        }.resume()
     }
 
     static func configure() {
@@ -166,11 +101,6 @@ enum BaiduSDKConfiguration {
         guard mapManager == nil else { return }
 
         BMKMapManager.setAgreePrivacy(true)
-        // File logging must be on before the engine starts so its data
-        // pipeline failures are recorded. The files land under Library/Caches
-        // and Settings exposes them through 查看百度地图日志.
-        BMKBaseLog.setlogEnable(true, module: BMKMapModuleTile)
-        BMKBaseLog.setlogEnable(true, module: BMKMapModuleBasic)
         // Prefer the SDK's own singleton. `BMKMapManager.h` both declares
         // `sharedInstance` and defines a `BMKMapManagerInstance` macro around
         // it, so SDK internals may route through that object; a separately
@@ -181,125 +111,6 @@ enum BaiduSDKConfiguration {
             configuredAPIKey = apiKey
             engineStartedAt = Date()
         }
-    }
-
-    /// In-process filesystem health. UserDefaults and the keychain both write
-    /// through system daemons (cfprefsd, securityd), so their working proves
-    /// nothing about this process's own file I/O — which is what 百度's engine
-    /// uses for its map-data cache. A blank map with a live render loop and
-    /// clean auth is exactly what failed in-process writes would produce.
-    static var storageDiagnostics: String {
-        let fileManager = FileManager.default
-        let home = NSHomeDirectory()
-        var lines = ["HOME：\(home)"]
-        lines.append("uid \(getuid()) / euid \(geteuid()) / gid \(getgid())")
-
-        for (name, directory) in [
-            ("Documents", "\(home)/Documents"),
-            ("Library/Caches", "\(home)/Library/Caches"),
-            ("tmp", NSTemporaryDirectory()),
-            ("/var/mobile/Library/Caches", "/var/mobile/Library/Caches")
-        ] {
-            var isDirectory: ObjCBool = false
-            let exists = fileManager.fileExists(atPath: directory, isDirectory: &isDirectory)
-            if !exists {
-                do {
-                    try fileManager.createDirectory(atPath: directory, withIntermediateDirectories: true)
-                    lines.append("\(name)：不存在，已创建")
-                } catch {
-                    lines.append("\(name)：不存在且无法创建（\((error as NSError).code)：\(error.localizedDescription)）")
-                    continue
-                }
-            }
-
-            var ownership = ""
-            if let attributes = try? fileManager.attributesOfItem(atPath: directory) {
-                let owner = attributes[.ownerAccountID] as? NSNumber
-                let group = attributes[.groupOwnerAccountID] as? NSNumber
-                let mode = attributes[.posixPermissions] as? NSNumber
-                ownership = "（属主 \(owner?.stringValue ?? "?"):\(group?.stringValue ?? "?") 权限 \(mode.map { String($0.intValue, radix: 8) } ?? "?")）"
-            }
-
-            let probePath = (directory as NSString).appendingPathComponent(".mocklocation-write-probe")
-            do {
-                try Data("probe".utf8).write(to: URL(fileURLWithPath: probePath), options: .atomic)
-                try fileManager.removeItem(atPath: probePath)
-                lines.append("\(name)：可写\(ownership)")
-            } catch {
-                lines.append("\(name)：写入失败\(ownership)（\((error as NSError).code)：\(error.localizedDescription)）")
-            }
-        }
-
-        // Any directory 百度 managed to create is evidence of where (and
-        // whether) its engine is writing.
-        var baiduDirs: [String] = []
-        for base in [home, "\(home)/Documents", "\(home)/Library", "\(home)/Library/Caches"] {
-            for entry in (try? fileManager.contentsOfDirectory(atPath: base)) ?? [] {
-                if entry.lowercased().contains("baidu") || entry.lowercased().contains("bmk") {
-                    baiduDirs.append("\(base)/\(entry)")
-                }
-            }
-        }
-        lines.append(baiduDirs.isEmpty ? "未发现任何百度数据目录" : "百度数据目录：\n" + baiduDirs.joined(separator: "\n"))
-
-        return lines.joined(separator: "\n")
-    }
-
-    /// Newest log files the SDK has written. `BMKBaseLog` documents its
-    /// default output as directories under Library/Caches, but its path
-    /// accessor's Swift-imported name is unreliable, so this scans the
-    /// filesystem instead: every recent file whose path smells like a 百度
-    /// log, newest first. Falls back to listing the Caches tree so a missing
-    /// log is itself visible.
-    static func recentLogExcerpt(maxBytesPerFile: Int = 24_576, maxFiles: Int = 4) -> String {
-        let fileManager = FileManager.default
-        let home = NSHomeDirectory()
-        let searchRoots = [
-            URL(fileURLWithPath: "\(home)/Library"),
-            URL(fileURLWithPath: "\(home)/Documents")
-        ]
-
-        var candidates: [(url: URL, modified: Date)] = []
-        var directoryNames: [String] = []
-        let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .contentModificationDateKey, .fileSizeKey]
-        for root in searchRoots {
-            guard let enumerator = fileManager.enumerator(at: root, includingPropertiesForKeys: keys) else { continue }
-            for case let url as URL in enumerator {
-                if enumerator.level > 6 { enumerator.skipDescendants() }
-                guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
-                if values.isDirectory == true {
-                    directoryNames.append(url.path.replacingOccurrences(of: home, with: ""))
-                    continue
-                }
-                guard values.isRegularFile == true, let modified = values.contentModificationDate else { continue }
-                let path = url.path.lowercased()
-                let looksLikeBaidu = path.contains("bmk") || path.contains("baidu") || path.contains("map")
-                let looksLikeLog = path.contains("log") || url.pathExtension.lowercased() == "log"
-                if looksLikeBaidu && looksLikeLog {
-                    candidates.append((url, modified))
-                }
-            }
-        }
-
-        guard !candidates.isEmpty else {
-            let tree = directoryNames.sorted().prefix(80).joined(separator: "\n")
-            return "在 Library 和 Documents 下没有找到百度日志文件。目录结构：\n\(tree.isEmpty ? "（空）" : tree)"
-        }
-
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MM-dd HH:mm:ss"
-        return candidates
-            .sorted { $0.modified > $1.modified }
-            .prefix(maxFiles)
-            .map { candidate in
-                let header = "【\(candidate.url.lastPathComponent) · \(formatter.string(from: candidate.modified))】\n\(candidate.url.path)"
-                guard let data = fileManager.contents(atPath: candidate.url.path) else {
-                    return "\(header)\n（无法读取）"
-                }
-                let tail = data.suffix(maxBytesPerFile)
-                return "\(header)\n\(String(decoding: tail, as: UTF8.self))"
-            }
-            .joined(separator: "\n\n====================\n\n")
     }
 
     /// `start` reported the auth request as sent, but the verdict callback can

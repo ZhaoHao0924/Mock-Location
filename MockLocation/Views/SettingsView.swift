@@ -1,23 +1,56 @@
 import Foundation
 import SwiftUI
-import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject private var simulation: LocationSimulationService
     @State private var showingResetConfirmation = false
     @State private var amapAPIKey = AMapSDKConfiguration.storedAPIKey
     @State private var baiduAPIKey = BaiduSDKConfiguration.storedAPIKey
+    @State private var isEditingAMapKey = false
+    @State private var isEditingBaiduKey = false
     @AppStorage(AMapSDKConfiguration.metalEnabledDefaultsKey) private var metalEnabled = true
     @State private var keySaveNotice: KeySaveNotice?
-    @State private var baiduNetworkProbeResult: String?
-    @State private var baiduNetworkProbeRunning = false
 
     var body: some View {
         NavigationView {
             Form {
-                amapKeySection
+                Section {
+                    KeyEditorRows(
+                        keyLabel: "iOS Key",
+                        bundleIDLabel: "Bundle ID",
+                        keyText: $amapAPIKey,
+                        isEditing: $isEditingAMapKey,
+                        isConfigured: AMapSDKConfiguration.isConfigured,
+                        storedValue: { AMapSDKConfiguration.storedAPIKey },
+                        onSave: saveAMapAPIKey
+                    )
 
-                baiduKeySection
+                    Toggle(isOn: $metalEnabled) {
+                        Text("使用 Metal 渲染")
+                    }
+                } header: {
+                    Text("高德地图")
+                } footer: {
+                    Text("高德地图通过原生 3D SDK 渲染，必须配置 Key：平台为「iOS」且绑定的 Bundle ID 与上面一致。如果地图数据显示已加载完成但画面空白，可切换 Metal 开关；切换后需要完全退出并重新打开应用才生效。")
+                        .font(.footnote)
+                }
+
+                Section {
+                    KeyEditorRows(
+                        keyLabel: "iOS AK",
+                        bundleIDLabel: "安全码 (Bundle ID)",
+                        keyText: $baiduAPIKey,
+                        isEditing: $isEditingBaiduKey,
+                        isConfigured: BaiduSDKConfiguration.isConfigured,
+                        storedValue: { BaiduSDKConfiguration.storedAPIKey },
+                        onSave: saveBaiduAPIKey
+                    )
+                } header: {
+                    Text("百度地图")
+                } footer: {
+                    Text("百度地图通过原生 SDK 渲染，必须配置 AK：在百度地图开放平台创建「iOS 端」应用，安全码填写与上面一致的 Bundle ID。首次保存后返回地图页即可加载；修改已生效的 AK 需要完全退出并重新打开应用。")
+                        .font(.footnote)
+                }
 
                 Section("模拟状态") {
                     HStack {
@@ -67,21 +100,30 @@ struct SettingsView: View {
         .navigationViewStyle(.stack)
     }
 
-    private var amapKeySection: some View {
-        Section {
+    /// The shared key-entry rows for both map providers. The field is locked
+    /// until 编辑 is tapped, so a stored key cannot be mangled by a stray tap.
+    private struct KeyEditorRows: View {
+        let keyLabel: String
+        let bundleIDLabel: String
+        @Binding var keyText: String
+        @Binding var isEditing: Bool
+        let isConfigured: Bool
+        let storedValue: () -> String
+        let onSave: () -> Void
+
+        var body: some View {
             // A plain TextField, not SecureField. The Key lives in UserDefaults
             // as plaintext, so masking it bought no security while making paste
-            // awkward and hiding whether a paste actually landed. Also no
-            // .textContentType(.password): that marks the field as a password
-            // and iOS hands the long-press menu to AutoFill, which can push
-            // 粘贴 out of the menu entirely.
-            TextField("iOS Key", text: $amapAPIKey)
+            // awkward and hiding whether a paste actually landed.
+            TextField(keyLabel, text: $keyText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.system(.body, design: .monospaced))
+                .foregroundColor(isEditing ? .primary : .secondary)
+                .disabled(!isEditing)
 
             HStack(alignment: .firstTextBaseline) {
-                Text("Bundle ID")
+                Text(bundleIDLabel)
                 Spacer()
                 Text(Bundle.main.bundleIdentifier ?? "com.personal.mocklocation")
                     .font(.footnote)
@@ -89,114 +131,38 @@ struct SettingsView: View {
                     .multilineTextAlignment(.trailing)
             }
 
-            Button {
-                saveAMapAPIKey()
-            } label: {
-                Label("保存 Key", systemImage: "checkmark")
-            }
-
-            if AMapSDKConfiguration.isConfigured {
-                Button(role: .destructive) {
-                    amapAPIKey = ""
-                    saveAMapAPIKey()
+            if isEditing {
+                Button {
+                    onSave()
+                    isEditing = false
                 } label: {
-                    Label("清除 Key", systemImage: "trash")
-                }
-            }
-
-            Toggle(isOn: $metalEnabled) {
-                Text("使用 Metal 渲染")
-            }
-
-            HStack(alignment: .firstTextBaseline) {
-                Text("Metal 设备")
-                Spacer()
-                Text(metalDeviceState)
-                    .font(.footnote)
-                    .foregroundColor(AMapMapViewFactory.isMetalAvailable() ? .secondary : .orange)
-            }
-        } header: {
-            Text("高德地图")
-        } footer: {
-            Text("高德地图通过原生 3D SDK 渲染，必须配置 Key：平台为「iOS」且绑定的 Bundle ID 与上面一致。如果地图数据显示已加载完成但画面空白，那是渲染器没有出帧，可切换上面的 Metal 开关；切换后需要完全退出并重新打开应用才生效。")
-                .font(.footnote)
-        }
-    }
-
-    private var baiduKeySection: some View {
-        Section {
-            TextField("iOS AK", text: $baiduAPIKey)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.system(.body, design: .monospaced))
-
-            HStack(alignment: .firstTextBaseline) {
-                Text("安全码 (Bundle ID)")
-                Spacer()
-                Text(Bundle.main.bundleIdentifier ?? "com.personal.mocklocation")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.trailing)
-            }
-
-            Button {
-                saveBaiduAPIKey()
-            } label: {
-                Label("保存 AK", systemImage: "checkmark")
-            }
-
-            if BaiduSDKConfiguration.isConfigured {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("SDK 状态")
-                    Text(BaiduSDKConfiguration.diagnosticSummary)
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
+                    Label("保存", systemImage: "checkmark")
                 }
 
                 Button {
-                    baiduNetworkProbeRunning = true
-                    baiduNetworkProbeResult = nil
-                    BaiduSDKConfiguration.probeNetwork { result in
-                        baiduNetworkProbeRunning = false
-                        baiduNetworkProbeResult = result
+                    keyText = storedValue()
+                    isEditing = false
+                } label: {
+                    Label("取消", systemImage: "xmark")
+                }
+
+                if isConfigured {
+                    Button(role: .destructive) {
+                        keyText = ""
+                        onSave()
+                        isEditing = false
+                    } label: {
+                        Label("清除", systemImage: "trash")
                     }
-                } label: {
-                    Label(
-                        baiduNetworkProbeRunning ? "正在测试连通性…" : "测试百度服务连通性",
-                        systemImage: "network"
-                    )
                 }
-                .disabled(baiduNetworkProbeRunning)
-
-                if let baiduNetworkProbeResult {
-                    Text(baiduNetworkProbeResult)
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                }
-
-                NavigationLink {
-                    BaiduLogView()
+            } else {
+                Button {
+                    isEditing = true
                 } label: {
-                    Label("查看百度地图日志", systemImage: "doc.text.magnifyingglass")
-                }
-
-                Button(role: .destructive) {
-                    baiduAPIKey = ""
-                    saveBaiduAPIKey()
-                } label: {
-                    Label("清除 AK", systemImage: "trash")
+                    Label("编辑", systemImage: "pencil")
                 }
             }
-        } header: {
-            Text("百度地图")
-        } footer: {
-            Text("百度地图通过原生 SDK 渲染，必须配置 AK：在百度地图开放平台创建「iOS 端」应用，安全码填写与上面一致的 Bundle ID。首次保存后返回地图页即可加载；修改已生效的 AK 需要完全退出并重新打开应用。")
-                .font(.footnote)
         }
-    }
-
-    private var metalDeviceState: String {
-        AMapMapViewFactory.isMetalAvailable() ? "可用" : "不可用"
     }
 
     private func saveAMapAPIKey() {
@@ -243,49 +209,6 @@ struct SettingsView: View {
         let id = UUID()
         let title: String
         let message: String
-    }
-
-    private struct BaiduLogView: View {
-        @State private var logText = ""
-
-        var body: some View {
-            ScrollView {
-                Text(logText.isEmpty ? "正在读取日志……" : logText)
-                    .font(.system(size: 11, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .textSelection(.enabled)
-            }
-            .navigationTitle("百度地图日志")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button {
-                        UIPasteboard.general.string = logText
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                    }
-                    .accessibilityLabel("复制全部日志")
-                    Button {
-                        loadLog()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .accessibilityLabel("刷新日志")
-                }
-            }
-            .onAppear(perform: loadLog)
-        }
-
-        private func loadLog() {
-            DispatchQueue.global(qos: .userInitiated).async {
-                let storage = BaiduSDKConfiguration.storageDiagnostics
-                let logs = BaiduSDKConfiguration.recentLogExcerpt()
-                DispatchQueue.main.async {
-                    logText = "—— 存储诊断 ——\n\(storage)\n\n—— SDK 日志 ——\n\(logs.isEmpty ? "没有读到日志内容。" : logs)"
-                }
-            }
-        }
     }
 
     @ViewBuilder

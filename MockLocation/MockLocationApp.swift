@@ -4,6 +4,7 @@ import SwiftUI
 struct MockLocationApp: App {
     @StateObject private var repository = LocationRepository()
     @StateObject private var simulation = LocationSimulationService()
+    @StateObject private var currentLocation = CurrentLocationProvider()
 
     init() {
         AMapSDKConfiguration.configure()
@@ -24,7 +25,23 @@ struct MockLocationApp: App {
                     BaiduSDKConfiguration.configure()
                     repository.consumePendingSharedLocation()
                     simulation.refreshAvailability()
+                    showRealLocationIfIdle()
                 }
+        }
+    }
+
+    /// With no simulation running, the map should open on where the user
+    /// really is rather than the built-in default. The result is applied only
+    /// while the selection is still untouched, so a place the user picked in
+    /// the meantime is never overridden.
+    private func showRealLocationIfIdle() {
+        guard simulation.state.activeSimulation == nil else { return }
+        let untouchedTitle = repository.selectedTitle
+        currentLocation.requestOnce { coordinate in
+            guard let coordinate,
+                  simulation.state.activeSimulation == nil,
+                  repository.selectedTitle == untouchedTitle else { return }
+            repository.select(coordinate, title: "当前位置", addToHistory: false)
         }
     }
 }
