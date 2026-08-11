@@ -60,6 +60,15 @@ struct LocationBaiduSDKView: UIViewRepresentable {
         private weak var registeredMapView: BMKMapView?
         private var didFinishLoading = false
         private var didReportAuthError = false
+        /// `onDrawMapFrame` fires per rendered frame; one observation proves
+        /// the render loop is alive at all.
+        private var renderLoopObserved = false
+        /// Set by `mapViewDidRenderValidData` — the engine's statement that
+        /// real map content reached the screen. This, not
+        /// `mapViewDidFinishLoading` (which per the header only means
+        /// initialization finished), is the success signal.
+        private var didRenderValidData = false
+        private var lastRenderError: NSError?
         private var loadWatchdog: DispatchWorkItem?
         private var sdkStateObserver: NSObjectProtocol?
 
@@ -88,6 +97,12 @@ struct LocationBaiduSDKView: UIViewRepresentable {
             }
             refreshAuthState()
             scheduleLoadWatchdog(for: mapView)
+            // SwiftUI attaches the view to the window after makeUIView
+            // returns; a refresh scheduled past that point restarts the
+            // engine's drawing on the now-visible surface.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak mapView] in
+                mapView?.mapForceRefresh()
+            }
         }
 
         private func refreshAuthState() {
@@ -100,6 +115,14 @@ struct LocationBaiduSDKView: UIViewRepresentable {
                 // the watchdog's "no verdict" advisory.
                 didReportAuthError = false
                 setMapError(nil)
+                // The map may have been created while auth was still pending,
+                // and the engine does not retry its tile fetches on its own.
+                // A forced refresh gives the now-authorized engine a fresh
+                // draw, and the watchdog a fresh window to judge it.
+                if let mapView = registeredMapView, !didRenderValidData {
+                    mapView.mapForceRefresh()
+                    scheduleLoadWatchdog(for: mapView)
+                }
             }
         }
 
@@ -166,17 +189,27 @@ struct LocationBaiduSDKView: UIViewRepresentable {
         }
 
         func mapViewDidFinishLoading(_ mapView: BMKMapView) {
+            // Per the SDK header this only means "地图初始化完毕" — engine
+            // initialization, not data on screen. Record it for diagnostics
+            // and let the watchdog keep judging until valid data renders.
             didFinishLoading = true
-            // "加载完成" is the engine's claim about its data, not proof that
-            // tiles rendered. While the auth verdict is still missing the
-            // watchdog stays armed, because a verdict-less engine draws no
-            // tiles and the user would otherwise see a silent blank map.
-            if BaiduSDKGeneralDelegate.shared.didReceivePermissionVerdict {
-                loadWatchdog?.cancel()
-                if BaiduSDKGeneralDelegate.shared.permissionErrorCode == nil {
-                    setMapError(nil)
-                }
+        }
+
+        func mapView(_ mapView: BMKMapView, onDrawMapFrame status: BMKMapStatus?) {
+            renderLoopObserved = true
+        }
+
+        func mapViewDidRenderValidData(_ mapView: BMKMapView, withError error: Error?) {
+            if let error = error as NSError?, error.code != 0 {
+                lastRenderError = error
+                setMapError("\(MapSource.baidu.title)绘制地图数据失败（\(error.domain) \(error.code)）：\(error.localizedDescription)")
+                return
             }
+            // Valid data is on screen — the one outcome that ends the hunt.
+            didRenderValidData = true
+            lastRenderError = nil
+            loadWatchdog?.cancel()
+            setMapError(nil)
         }
 
         func mapView(_ mapView: BMKMapView, viewFor annotation: BMKAnnotation) -> BMKAnnotationView? {
@@ -208,7 +241,8 @@ struct LocationBaiduSDKView: UIViewRepresentable {
         private func scheduleLoadWatchdog(for mapView: BMKMapView) {
             loadWatchdog?.cancel()
             let watchdog = DispatchWorkItem { [weak self, weak mapView] in
-                guard let self, let mapView, self.registeredMapView === mapView else { return }
+                guard let self, let mapView, self.registeredMapView === mapView,
+                      !self.didRenderValidData else { return }
                 let delegate = BaiduSDKGeneralDelegate.shared
 
                 if let code = delegate.permissionErrorCode {
@@ -217,8 +251,16 @@ struct LocationBaiduSDKView: UIViewRepresentable {
                     self.setMapError("\(MapSource.baidu.title) SDK 鉴权一直没有返回结果，底图不会下发。点击「重试」可重启引擎重新鉴权。\(BaiduSDKConfiguration.diagnosticSummary)。")
                 } else if let code = delegate.networkErrorCode {
                     self.setMapError("\(MapSource.baidu.title) SDK 联网失败（错误码 \(code)）。请检查网络后重试。\(BaiduSDKConfiguration.diagnosticSummary)。")
-                } else if !self.didFinishLoading {
-                    self.setMapError("\(MapSource.baidu.title) SDK 未在限定时间内完成地图加载。请检查网络与 AK 配置后重试。\(BaiduSDKConfiguration.diagnosticSummary)。")
+                } else {
+                    // Auth is clean yet nothing valid rendered. The render
+                    // flags split the remaining suspects: a dead render loop
+                    // is the GPU/surface, a live loop without valid data is
+                    // the tile data path.
+                    var renderState = "引擎初始化\(self.didFinishLoading ? "已完成" : "未完成")；渲染循环\(self.renderLoopObserved ? "运行中" : "未运行")；有效数据未绘制"
+                    if let error = self.lastRenderError {
+                        renderState += "；渲染错误 \(error.domain) \(error.code)"
+                    }
+                    self.setMapError("\(MapSource.baidu.title)鉴权已通过但底图没有绘制出来（\(renderState)）。\(BaiduSDKConfiguration.diagnosticSummary)。")
                 }
             }
             loadWatchdog = watchdog
