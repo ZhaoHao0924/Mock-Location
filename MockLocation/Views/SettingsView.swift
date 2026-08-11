@@ -8,6 +8,8 @@ struct SettingsView: View {
     @State private var baiduAPIKey = BaiduSDKConfiguration.storedAPIKey
     @AppStorage(AMapSDKConfiguration.metalEnabledDefaultsKey) private var metalEnabled = true
     @State private var keySaveNotice: KeySaveNotice?
+    @State private var baiduNetworkProbeResult: String?
+    @State private var baiduNetworkProbeRunning = false
 
     var body: some View {
         NavigationView {
@@ -146,6 +148,27 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("SDK 状态")
                     Text(BaiduSDKConfiguration.diagnosticSummary)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+
+                Button {
+                    baiduNetworkProbeRunning = true
+                    baiduNetworkProbeResult = nil
+                    BaiduSDKConfiguration.probeNetwork { result in
+                        baiduNetworkProbeRunning = false
+                        baiduNetworkProbeResult = result
+                    }
+                } label: {
+                    Label(
+                        baiduNetworkProbeRunning ? "正在测试连通性…" : "测试百度服务连通性",
+                        systemImage: "network"
+                    )
+                }
+                .disabled(baiduNetworkProbeRunning)
+
+                if let baiduNetworkProbeResult {
+                    Text(baiduNetworkProbeResult)
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 }

@@ -18,6 +18,17 @@
         <string>AGXDeviceUserClient</string>
         <string>IOSurfaceRootUserClient</string>
     </array>
+    <!-- Keychain access requires an application-identifier: it is what places
+         a process into a keychain access group. Ad-hoc TrollStore signing has
+         no team ID, so the bundle ID stands alone. Without this every SecItem
+         call fails with errSecMissingEntitlement (-34018), which breaks any
+         SDK that persists auth state in the keychain. -->
+    <key>application-identifier</key>
+    <string>com.personal.mocklocation</string>
+    <key>keychain-access-groups</key>
+    <array>
+        <string>com.personal.mocklocation</string>
+    </array>
     <key>com.apple.security.application-groups</key>
     <array>
         <string>group.com.personal.mocklocation</string>
