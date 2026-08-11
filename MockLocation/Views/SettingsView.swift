@@ -17,7 +17,6 @@ struct SettingsView: View {
                 Section {
                     KeyEditorRows(
                         keyLabel: "iOS Key",
-                        bundleIDLabel: "Bundle ID",
                         keyText: $amapAPIKey,
                         isEditing: $isEditingAMapKey,
                         isConfigured: AMapSDKConfiguration.isConfigured,
@@ -38,7 +37,6 @@ struct SettingsView: View {
                 Section {
                     KeyEditorRows(
                         keyLabel: "iOS AK",
-                        bundleIDLabel: "安全码 (Bundle ID)",
                         keyText: $baiduAPIKey,
                         isEditing: $isEditingBaiduKey,
                         isConfigured: BaiduSDKConfiguration.isConfigured,
@@ -102,9 +100,10 @@ struct SettingsView: View {
 
     /// The shared key-entry rows for both map providers. The field is locked
     /// until 编辑 is tapped, so a stored key cannot be mangled by a stray tap.
+    /// Both providers bind their key to the same app Bundle ID (百度 calls it
+    /// 安全码), so the row is labeled identically for both.
     private struct KeyEditorRows: View {
         let keyLabel: String
-        let bundleIDLabel: String
         @Binding var keyText: String
         @Binding var isEditing: Bool
         let isConfigured: Bool
@@ -123,7 +122,7 @@ struct SettingsView: View {
                 .disabled(!isEditing)
 
             HStack(alignment: .firstTextBaseline) {
-                Text(bundleIDLabel)
+                Text("Bundle ID")
                 Spacer()
                 Text(Bundle.main.bundleIdentifier ?? "com.personal.mocklocation")
                     .font(.footnote)
