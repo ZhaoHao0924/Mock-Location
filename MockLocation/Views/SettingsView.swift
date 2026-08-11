@@ -143,6 +143,13 @@ struct SettingsView: View {
             }
 
             if BaiduSDKConfiguration.isConfigured {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("SDK 状态")
+                    Text(BaiduSDKConfiguration.diagnosticSummary)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+
                 Button(role: .destructive) {
                     baiduAPIKey = ""
                     saveBaiduAPIKey()

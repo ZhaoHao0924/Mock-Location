@@ -15,7 +15,10 @@ struct LocationBaiduSDKView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> BMKMapView {
         BaiduSDKConfiguration.configure()
-        let mapView = BMKMapView(frame: .zero)
+        // A non-empty initialization frame matters on this device: the 高德
+        // SDK's render surface never produced a frame when created at .zero
+        // under SwiftUI, and both SDKs drive their surfaces the same way.
+        let mapView = BMKMapView(frame: UIScreen.main.bounds)
         guard BaiduSDKConfiguration.isStarted else {
             context.coordinator.setMapError("\(MapSource.baidu.title) SDK 未能启动（\(BaiduSDKConfiguration.diagnosticSummary)）。")
             return mapView
@@ -52,7 +55,9 @@ struct LocationBaiduSDKView: UIViewRepresentable {
         private var mapOriginCoordinate: GeoCoordinate?
         private weak var registeredMapView: BMKMapView?
         private var didFinishLoading = false
+        private var didReportAuthError = false
         private var loadWatchdog: DispatchWorkItem?
+        private var sdkStateObserver: NSObjectProtocol?
 
         init(parent: LocationBaiduSDKView) {
             self.parent = parent
@@ -60,12 +65,35 @@ struct LocationBaiduSDKView: UIViewRepresentable {
 
         deinit {
             loadWatchdog?.cancel()
+            if let sdkStateObserver {
+                NotificationCenter.default.removeObserver(sdkStateObserver)
+            }
         }
 
         func register(_ mapView: BMKMapView) {
             registeredMapView = mapView
             update(mapView, centerOnSelection: true)
+            // 鉴权是 start 后的异步回调，可能在任何时刻返回（包括
+            // mapViewDidFinishLoading 之后）。即时上报，不依赖看门狗。
+            sdkStateObserver = NotificationCenter.default.addObserver(
+                forName: .baiduSDKStateDidChange,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.refreshAuthState()
+            }
+            refreshAuthState()
             scheduleLoadWatchdog(for: mapView)
+        }
+
+        private func refreshAuthState() {
+            if let code = BaiduSDKGeneralDelegate.shared.permissionErrorCode {
+                didReportAuthError = true
+                setMapError("\(MapSource.baidu.title) AK 校验未通过（错误码 \(code)）。请确认在百度开放平台创建的是「iOS 端」应用，且安全码与 Bundle ID 一致。\(BaiduSDKConfiguration.diagnosticSummary)。")
+            } else if didReportAuthError, BaiduSDKGeneralDelegate.shared.didReceivePermissionVerdict {
+                didReportAuthError = false
+                setMapError(nil)
+            }
         }
 
         func update(_ mapView: BMKMapView, centerOnSelection: Bool) {
@@ -133,7 +161,11 @@ struct LocationBaiduSDKView: UIViewRepresentable {
         func mapViewDidFinishLoading(_ mapView: BMKMapView) {
             didFinishLoading = true
             loadWatchdog?.cancel()
-            setMapError(nil)
+            // "加载完成" is the engine's claim about its data, not proof that
+            // tiles rendered. A pending or later auth failure must stay visible.
+            if BaiduSDKGeneralDelegate.shared.permissionErrorCode == nil {
+                setMapError(nil)
+            }
         }
 
         func mapView(_ mapView: BMKMapView, viewFor annotation: BMKAnnotation) -> BMKAnnotationView? {
