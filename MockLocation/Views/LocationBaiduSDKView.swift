@@ -1,0 +1,183 @@
+import CoreLocation
+import Foundation
+import SwiftUI
+import UIKit
+
+/// 百度 renders through the native BaiduMapKit SDK. The SDK works in BD09LL
+/// coordinates, so every selection crossing this boundary goes through
+/// `ChinaCoordinateConverter` (the repository stores WGS-84).
+struct LocationBaiduSDKView: UIViewRepresentable {
+    @Binding var coordinate: GeoCoordinate
+    @Binding var title: String
+    @Binding var mapError: String?
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeUIView(context: Context) -> BMKMapView {
+        BaiduSDKConfiguration.configure()
+        let mapView = BMKMapView(frame: .zero)
+        guard BaiduSDKConfiguration.isStarted else {
+            context.coordinator.setMapError("\(MapSource.baidu.title) SDK 未能启动（\(BaiduSDKConfiguration.diagnosticSummary)）。")
+            return mapView
+        }
+
+        mapView.delegate = context.coordinator
+        mapView.zoomLevel = 17
+        mapView.viewWillAppear()
+        context.coordinator.register(mapView)
+        return mapView
+    }
+
+    func updateUIView(_ mapView: BMKMapView, context: Context) {
+        context.coordinator.parent = self
+        context.coordinator.update(mapView, centerOnSelection: false)
+    }
+
+    static func dismantleUIView(_ mapView: BMKMapView, coordinator: Coordinator) {
+        mapView.viewWillDisappear()
+        mapView.delegate = nil
+    }
+
+    final class Coordinator: NSObject, BMKMapViewDelegate {
+        var parent: LocationBaiduSDKView
+
+        private static let mapSelectionTitle = "地图选点"
+        private static let pinReuseIdentifier = "MockLocationBaiduPin"
+
+        private var annotation: BMKPointAnnotation?
+        private var displayedCoordinate: GeoCoordinate?
+        /// The coordinate this map itself just published. While it is pending,
+        /// the SwiftUI round-trip must not recenter: tapping near an edge would
+        /// otherwise yank the view out from under the finger that just tapped.
+        private var mapOriginCoordinate: GeoCoordinate?
+        private weak var registeredMapView: BMKMapView?
+        private var didFinishLoading = false
+        private var loadWatchdog: DispatchWorkItem?
+
+        init(parent: LocationBaiduSDKView) {
+            self.parent = parent
+        }
+
+        deinit {
+            loadWatchdog?.cancel()
+        }
+
+        func register(_ mapView: BMKMapView) {
+            registeredMapView = mapView
+            update(mapView, centerOnSelection: true)
+            scheduleLoadWatchdog(for: mapView)
+        }
+
+        func update(_ mapView: BMKMapView, centerOnSelection: Bool) {
+            guard registeredMapView === mapView else { return }
+            guard parent.coordinate.isValid else {
+                setMapError("坐标无效，无法加载地图。")
+                return
+            }
+
+            let selectionChanged = displayedCoordinate != parent.coordinate
+            // Selections made on the map keep the camera where the user left
+            // it. Selections arriving from search, favorites, coordinate entry
+            // or a share still recenter, because their target may be off screen.
+            let cameFromMap = mapOriginCoordinate == parent.coordinate
+            if cameFromMap {
+                mapOriginCoordinate = nil
+            }
+            let mapCoordinate = ChinaCoordinateConverter.wgs84ToBD09(parent.coordinate.clCoordinate)
+            let marker = annotation ?? BMKPointAnnotation()
+            marker.coordinate = mapCoordinate
+            marker.title = parent.title
+
+            if annotation == nil {
+                annotation = marker
+                mapView.addAnnotation(marker)
+            }
+
+            if centerOnSelection || (selectionChanged && !cameFromMap) {
+                mapView.centerCoordinate = mapCoordinate
+            }
+            displayedCoordinate = parent.coordinate
+        }
+
+        /// Single delivery point for every selection made on the map itself.
+        /// Marking `mapOriginCoordinate` is what stops `update` from
+        /// recentering on the way back through SwiftUI.
+        private func publishFromMap(_ bd09Coordinate: CLLocationCoordinate2D, title: String? = nil) {
+            let wgs84Coordinate = ChinaCoordinateConverter.bd09ToWGS84(bd09Coordinate)
+            guard CLLocationCoordinate2DIsValid(wgs84Coordinate) else { return }
+
+            let published = GeoCoordinate(
+                latitude: wgs84Coordinate.latitude,
+                longitude: wgs84Coordinate.longitude
+            )
+            mapOriginCoordinate = published
+            parent.coordinate = published
+            parent.title = title ?? Self.mapSelectionTitle
+        }
+
+        func mapView(_ mapView: BMKMapView, onClickedMapBlank coordinate: CLLocationCoordinate2D) {
+            publishFromMap(coordinate)
+        }
+
+        func mapView(_ mapView: BMKMapView, onClickedMapPoi mapPoi: BMKMapPoi) {
+            let poiTitle = mapPoi.text?.trimmingCharacters(in: .whitespacesAndNewlines)
+            publishFromMap(mapPoi.pt, title: (poiTitle?.isEmpty == false) ? poiTitle : nil)
+        }
+
+        // The lowercase `mapview` is 百度's own selector spelling for the
+        // long-press callback; renaming it here would silently unhook it.
+        func mapview(_ mapView: BMKMapView, onLongClick coordinate: CLLocationCoordinate2D) {
+            publishFromMap(coordinate)
+        }
+
+        func mapViewDidFinishLoading(_ mapView: BMKMapView) {
+            didFinishLoading = true
+            loadWatchdog?.cancel()
+            setMapError(nil)
+        }
+
+        func mapView(_ mapView: BMKMapView, viewFor annotation: BMKAnnotation) -> BMKAnnotationView? {
+            guard annotation is BMKPointAnnotation else { return nil }
+
+            let identifier = Self.pinReuseIdentifier
+            let pin: BMKPinAnnotationView
+            if let reused = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                as? BMKPinAnnotationView {
+                pin = reused
+            } else {
+                pin = BMKPinAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            }
+            pin.annotation = annotation
+            pin.animatesDrop = false
+            return pin
+        }
+
+        func setMapError(_ message: String?) {
+            if Thread.isMainThread {
+                parent.mapError = message
+            } else {
+                DispatchQueue.main.async { [weak self] in
+                    self?.parent.mapError = message
+                }
+            }
+        }
+
+        private func scheduleLoadWatchdog(for mapView: BMKMapView) {
+            loadWatchdog?.cancel()
+            let watchdog = DispatchWorkItem { [weak self, weak mapView] in
+                guard let self, let mapView, self.registeredMapView === mapView,
+                      !self.didFinishLoading else { return }
+
+                if let code = BaiduSDKGeneralDelegate.shared.permissionErrorCode {
+                    self.setMapError("\(MapSource.baidu.title) AK 校验未通过（错误码 \(code)）。请确认在百度开放平台创建的是「iOS 端」应用，且安全码与 Bundle ID 一致。\(BaiduSDKConfiguration.diagnosticSummary)。")
+                } else if let code = BaiduSDKGeneralDelegate.shared.networkErrorCode {
+                    self.setMapError("\(MapSource.baidu.title) SDK 联网失败（错误码 \(code)）。请检查网络后重试。\(BaiduSDKConfiguration.diagnosticSummary)。")
+                } else {
+                    self.setMapError("\(MapSource.baidu.title) SDK 未在限定时间内完成地图加载。请检查网络与 AK 配置后重试。\(BaiduSDKConfiguration.diagnosticSummary)。")
+                }
+            }
+            loadWatchdog = watchdog
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: watchdog)
+        }
+    }
+}

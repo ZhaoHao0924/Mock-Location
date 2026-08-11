@@ -177,6 +177,17 @@ test -n "${standard_style_path}" || {
 }
 echo "::notice title=AMap resources::Using ${amap_bundle_path} (${amap_bundle_version})"
 
+# BaiduMapKit ships its base-map resources as mapapi.bundle, copied into the
+# app root by the CocoaPods resource script. A missing bundle renders a blank
+# map at runtime, so surface it — but only as a warning, since the bundle's
+# packaging layout is owned by the pod and may move between SDK versions.
+baidu_bundle_path="${app_path}/mapapi.bundle"
+if [[ -d "${baidu_bundle_path}" ]]; then
+  echo "::notice title=Baidu resources::Using ${baidu_bundle_path}"
+else
+  echo "::warning title=Baidu resources::mapapi.bundle was not found in the app bundle; the Baidu base map may render blank."
+fi
+
 sign_bundle() {
   local bundle_path="$1"
   local entitlements_path="$2"

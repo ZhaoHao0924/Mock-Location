@@ -7,6 +7,7 @@ struct MockLocationApp: App {
 
     init() {
         AMapSDKConfiguration.configure()
+        BaiduSDKConfiguration.configure()
     }
 
     var body: some Scene {

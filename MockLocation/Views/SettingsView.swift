@@ -5,13 +5,16 @@ struct SettingsView: View {
     @EnvironmentObject private var simulation: LocationSimulationService
     @State private var showingResetConfirmation = false
     @State private var amapAPIKey = AMapSDKConfiguration.storedAPIKey
+    @State private var baiduAPIKey = BaiduSDKConfiguration.storedAPIKey
     @AppStorage(AMapSDKConfiguration.metalEnabledDefaultsKey) private var metalEnabled = true
-    @State private var amapKeySaveNotice: AMapKeySaveNotice?
+    @State private var keySaveNotice: KeySaveNotice?
 
     var body: some View {
         NavigationView {
             Form {
                 amapKeySection
+
+                baiduKeySection
 
                 Section("模拟状态") {
                     HStack {
@@ -46,7 +49,7 @@ struct SettingsView: View {
             .confirmationDialog("停止虚拟定位？", isPresented: $showingResetConfirmation, titleVisibility: .visible) {
                 Button("停止并清除", role: .destructive) { simulation.stop() }
             }
-            .alert(item: $amapKeySaveNotice) { notice in
+            .alert(item: $keySaveNotice) { notice in
                 Alert(
                     title: Text(notice.title),
                     message: Text(notice.message),
@@ -55,6 +58,7 @@ struct SettingsView: View {
             }
             .onAppear {
                 amapAPIKey = AMapSDKConfiguration.storedAPIKey
+                baiduAPIKey = BaiduSDKConfiguration.storedAPIKey
             }
         }
         .navigationViewStyle(.stack)
@@ -116,6 +120,44 @@ struct SettingsView: View {
         }
     }
 
+    private var baiduKeySection: some View {
+        Section {
+            TextField("iOS AK", text: $baiduAPIKey)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.system(.body, design: .monospaced))
+
+            HStack(alignment: .firstTextBaseline) {
+                Text("安全码 (Bundle ID)")
+                Spacer()
+                Text(Bundle.main.bundleIdentifier ?? "com.personal.mocklocation")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.trailing)
+            }
+
+            Button {
+                saveBaiduAPIKey()
+            } label: {
+                Label("保存 AK", systemImage: "checkmark")
+            }
+
+            if BaiduSDKConfiguration.isConfigured {
+                Button(role: .destructive) {
+                    baiduAPIKey = ""
+                    saveBaiduAPIKey()
+                } label: {
+                    Label("清除 AK", systemImage: "trash")
+                }
+            }
+        } header: {
+            Text("百度地图")
+        } footer: {
+            Text("百度地图通过原生 SDK 渲染，必须配置 AK：在百度地图开放平台创建「iOS 端」应用，安全码填写与上面一致的 Bundle ID。首次保存后返回地图页即可加载；修改已生效的 AK 需要完全退出并重新打开应用。")
+                .font(.footnote)
+        }
+    }
+
     private var metalDeviceState: String {
         AMapMapViewFactory.isMetalAvailable() ? "可用" : "不可用"
     }
@@ -137,10 +179,30 @@ struct SettingsView: View {
             title = "Key 已保存"
             message = "返回地图页即可加载高德地图。"
         }
-        amapKeySaveNotice = AMapKeySaveNotice(title: title, message: message)
+        keySaveNotice = KeySaveNotice(title: title, message: message)
     }
 
-    private struct AMapKeySaveNotice: Identifiable {
+    private func saveBaiduAPIKey() {
+        let keyWasCleared = baiduAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let requiresRestart = BaiduSDKConfiguration.saveAPIKey(baiduAPIKey)
+        baiduAPIKey = BaiduSDKConfiguration.storedAPIKey
+
+        let title: String
+        let message: String
+        if requiresRestart {
+            title = "需要重新打开应用"
+            message = "新的百度地图 AK 会在重新打开应用后生效。"
+        } else if keyWasCleared {
+            title = "AK 已清除"
+            message = "百度地图处于未配置状态。"
+        } else {
+            title = "AK 已保存"
+            message = "返回地图页即可加载百度地图。"
+        }
+        keySaveNotice = KeySaveNotice(title: title, message: message)
+    }
+
+    private struct KeySaveNotice: Identifiable {
         let id = UUID()
         let title: String
         let message: String

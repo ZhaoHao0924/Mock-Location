@@ -9,6 +9,7 @@ struct MapDashboardView: View {
     @State private var mapError: String?
     @State private var mapReloadToken = 0
     @AppStorage(AMapSDKConfiguration.apiKeyDefaultsKey) private var amapAPIKey = ""
+    @AppStorage(BaiduSDKConfiguration.apiKeyDefaultsKey) private var baiduAPIKey = ""
     @State private var latitudeText = ""
     @State private var longitudeText = ""
     @State private var showFavoriteName = false
@@ -71,6 +72,10 @@ struct MapDashboardView: View {
         !amapAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var hasBaiduAPIKey: Bool {
+        !baiduAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var mapViewIdentity: String {
         "\(mapSource.title)-\(amapStyle.title)-\(mapReloadToken)"
     }
@@ -88,25 +93,31 @@ struct MapDashboardView: View {
                     mapError: $mapError
                 )
             } else {
-                amapKeyPlaceholder
+                mapKeyPlaceholder("未配置高德地图 iOS Key")
             }
         } else {
-            LocationMapProviderView(
-                coordinate: $repository.selectedCoordinate,
-                title: $repository.selectedTitle,
-                mapError: $mapError
-            )
+            // 百度 likewise renders through its native SDK and needs an iOS AK
+            // whose 安全码 matches this Bundle ID.
+            if hasBaiduAPIKey {
+                LocationBaiduSDKView(
+                    coordinate: $repository.selectedCoordinate,
+                    title: $repository.selectedTitle,
+                    mapError: $mapError
+                )
+            } else {
+                mapKeyPlaceholder("未配置百度地图 iOS AK")
+            }
         }
     }
 
-    private var amapKeyPlaceholder: some View {
+    private func mapKeyPlaceholder(_ message: String) -> some View {
         Color.secondary.opacity(0.12)
             .overlay {
                 VStack(spacing: 8) {
                     Image(systemName: "key.horizontal")
                         .font(.title2)
                         .foregroundColor(.secondary)
-                    Text("未配置高德地图 iOS Key")
+                    Text(message)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
