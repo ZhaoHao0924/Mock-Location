@@ -8,6 +8,12 @@ struct SimulationNotice: Identifiable {
     let message: String
 }
 
+extension Notification.Name {
+    /// Posted after the system simulation is successfully torn down, so the
+    /// app can recenter on the real position no matter which screen stopped it.
+    static let simulationDidStop = Notification.Name("simulation-did-stop")
+}
+
 final class LocationSimulationService: ObservableObject {
     enum State: Equatable {
         case idle
@@ -57,6 +63,7 @@ final class LocationSimulationService: ObservableObject {
             try PrivateLocationBridge.stop()
             state = .idle
             presentNotice(title: "虚拟定位已关闭", message: "系统位置已恢复为真实位置。")
+            NotificationCenter.default.post(name: .simulationDidStop, object: nil)
         } catch {
             let message = failureMessage(for: error)
             state = .failed(message)

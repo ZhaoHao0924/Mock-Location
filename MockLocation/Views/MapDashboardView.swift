@@ -22,9 +22,6 @@ struct MapDashboardView: View {
                     mapSurface
                         .id(mapViewIdentity)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    if let mapError {
-                        mapErrorBanner(message: mapError)
-                    }
                 }
 
                 controlSurface
@@ -101,8 +98,7 @@ struct MapDashboardView: View {
             if hasBaiduAPIKey {
                 LocationBaiduSDKView(
                     coordinate: $repository.selectedCoordinate,
-                    title: $repository.selectedTitle,
-                    mapError: $mapError
+                    title: $repository.selectedTitle
                 )
             } else {
                 mapKeyPlaceholder("未配置百度地图 iOS AK")
@@ -141,31 +137,6 @@ struct MapDashboardView: View {
         .listStyle(.plain)
         .frame(maxHeight: 220)
         .background(.regularMaterial)
-    }
-
-    private func mapErrorBanner(message: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "map.fill")
-                .foregroundColor(.orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("地图数据未加载")
-                    .font(.subheadline.weight(.semibold))
-                Text(message)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Spacer(minLength: 8)
-            Button("重试") {
-                mapError = nil
-                mapReloadToken += 1
-            }
-            .font(.subheadline.weight(.semibold))
-        }
-        .padding(12)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .padding(.horizontal)
-        .padding(.top, 8)
     }
 
     private var controlSurface: some View {

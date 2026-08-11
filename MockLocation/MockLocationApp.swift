@@ -27,6 +27,13 @@ struct MockLocationApp: App {
                     simulation.refreshAvailability()
                     showRealLocationIfIdle()
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .simulationDidStop)) { _ in
+                    // locationd needs a moment to drop the mocked fix after
+                    // the simulation stops; asking too early returns it again.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        showRealLocation()
+                    }
+                }
         }
     }
 
@@ -41,6 +48,15 @@ struct MockLocationApp: App {
             guard let coordinate,
                   simulation.state.activeSimulation == nil,
                   repository.selectedTitle == untouchedTitle else { return }
+            repository.select(coordinate, title: "当前位置", addToHistory: false)
+        }
+    }
+
+    /// After the user explicitly stops the simulation, the map returns to the
+    /// real position unconditionally — that is the whole point of stopping.
+    private func showRealLocation() {
+        currentLocation.requestOnce { coordinate in
+            guard let coordinate, simulation.state.activeSimulation == nil else { return }
             repository.select(coordinate, title: "当前位置", addToHistory: false)
         }
     }
