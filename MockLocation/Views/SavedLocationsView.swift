@@ -3,6 +3,7 @@ import SwiftUI
 struct SavedLocationsView: View {
     @EnvironmentObject private var repository: LocationRepository
     @EnvironmentObject private var simulation: LocationSimulationService
+    @State private var renamingFavorite: SavedLocation?
 
     var body: some View {
         NavigationView {
@@ -12,7 +13,11 @@ struct SavedLocationsView: View {
                         Text("暂无收藏地点").foregroundColor(.secondary)
                     }
                     ForEach(repository.favorites) { location in
-                        locationRow(location) { repository.deleteFavorite(location) }
+                        locationRow(
+                            location,
+                            delete: { repository.deleteFavorite(location) },
+                            rename: { renamingFavorite = location }
+                        )
                     }
                 }
 
@@ -21,7 +26,7 @@ struct SavedLocationsView: View {
                         Text("暂无最近使用地点").foregroundColor(.secondary)
                     }
                     ForEach(repository.recentLocations) { location in
-                        locationRow(location) { repository.deleteRecent(location) }
+                        locationRow(location, delete: { repository.deleteRecent(location) })
                     }
                 } header: {
                     HStack {
@@ -58,9 +63,18 @@ struct SavedLocationsView: View {
             .navigationTitle("收藏与记录")
         }
         .navigationViewStyle(.stack)
+        .sheet(item: $renamingFavorite) { favorite in
+            RenameFavoriteSheet(favorite: favorite) { newTitle in
+                repository.renameFavorite(favorite, title: newTitle)
+            }
+        }
     }
 
-    private func locationRow(_ location: SavedLocation, delete: @escaping () -> Void) -> some View {
+    private func locationRow(
+        _ location: SavedLocation,
+        delete: @escaping () -> Void,
+        rename: (() -> Void)? = nil
+    ) -> some View {
         Button {
             repository.select(location.coordinate, title: location.title)
         } label: {
@@ -73,6 +87,12 @@ struct SavedLocationsView: View {
             Button(role: .destructive, action: delete) {
                 Label("删除", systemImage: "trash")
             }
+            if let rename {
+                Button(action: rename) {
+                    Label("重命名", systemImage: "pencil")
+                }
+                .tint(.orange)
+            }
             Button {
                 simulation.startPoint(location.coordinate, title: location.title)
             } label: {
@@ -80,5 +100,49 @@ struct SavedLocationsView: View {
             }
             .tint(.teal)
         }
+    }
+}
+
+private struct RenameFavoriteSheet: View {
+    let favorite: SavedLocation
+    let onSave: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String
+
+    init(favorite: SavedLocation, onSave: @escaping (String) -> Void) {
+        self.favorite = favorite
+        self.onSave = onSave
+        _title = State(initialValue: favorite.title)
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("别名") {
+                    TextField("输入别名", text: $title)
+                }
+                Section("坐标") {
+                    Text(favorite.coordinate.displayValue)
+                        .font(.footnote.monospacedDigit())
+                        .foregroundColor(.secondary)
+                }
+            }
+            .navigationTitle("重命名收藏")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        onSave(title)
+                        dismiss()
+                    }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .navigationViewStyle(.stack)
     }
 }

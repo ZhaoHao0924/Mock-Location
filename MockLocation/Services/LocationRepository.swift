@@ -40,6 +40,13 @@ final class LocationRepository: ObservableObject {
         }
     }
 
+    func renameFavorite(_ favorite: SavedLocation, title: String) {
+        guard let index = favorites.firstIndex(where: { $0.id == favorite.id }),
+              let newTitle = title.nonEmpty else { return }
+        favorites[index].title = newTitle
+        persist(favorites, key: Key.favorites)
+    }
+
     func deleteFavorite(_ favorite: SavedLocation) {
         favorites.removeAll { $0.id == favorite.id }
         persist(favorites, key: Key.favorites)
